@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/Bruce-Sakura/UploadMyself/backend/agent"
@@ -199,10 +200,23 @@ func (h *Handler) GetAvatar(c *gin.Context) {
 }
 
 func (h *Handler) DeleteAvatar(c *gin.Context) {
-	if err := h.db.Delete(&model.Avatar{}, "id = ?", c.Param("id")).Error; err != nil {
+	id := c.Param("id")
+	var a model.Avatar
+	if err := h.db.First(&a, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
+	// 删除关联文件
+	if a.PhotoPath != "" {
+		os.Remove(a.PhotoPath)
+	}
+	if a.OutputPath != "" {
+		os.Remove(a.OutputPath)
+	}
+	if a.Result != "" && a.Result != a.PhotoPath {
+		os.Remove(a.Result)
+	}
+	h.db.Delete(&model.Avatar{}, "id = ?", id)
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
@@ -405,11 +419,14 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		script := fmt.Sprintf("%s/detect_face.py", MLScriptsDir)
-		outputJSON := fmt.Sprintf("%s/%s_face.json", UploadDir, avatarID)
+		// generate_avatar.py: photo → cartoon → skeleton → animation
+		outputDir := fmt.Sprintf("%s/%s_output", UploadDir, avatarID)
+		script := fmt.Sprintf("%s/generate_avatar.py", MLScriptsDir)
 		cmd := exec.CommandContext(ctx, PythonBin, script,
 			"--input", a.PhotoPath,
-			"--output", outputJSON,
+			"--output-dir", outputDir,
+			"--style", a.Style,
+			"--name", avatarID,
 		)
 
 		out, err := cmd.Output()
@@ -419,20 +436,24 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 			return
 		}
 
-		// Read result from output file (not stdout)
+		// Parse JSON from stdout
 		var result map[string]interface{}
-		if data, readErr := os.ReadFile(outputJSON); readErr == nil {
-			json.Unmarshal(data, &result)
-		}
-		// Also try stdout
 		if len(out) > 0 {
 			json.Unmarshal(out, &result)
 		}
 
-		// Store the original photo as result (detect_face doesn't generate new image)
-		h.db.Model(&a).Update("result", a.PhotoPath)
-		if op, ok := result["output_path"]; ok {
-			h.db.Model(&a).Update("output_path", fmt.Sprintf("%v", op))
+		// Convert paths to relative URLs
+		for _, key := range []string{"cartoon_image", "skeleton_image", "animation_data"} {
+			if v, ok := result[key]; ok {
+				result[key] = strings.Replace(fmt.Sprintf("%v", v), UploadDir, "uploads", 1)
+			}
+		}
+		// Store full JSON as result (contains cartoon + skeleton + animation paths)
+		animJSON, _ := json.Marshal(result)
+		h.db.Model(&a).Update("result", string(animJSON))
+		// Store cartoon as output_path for quick access
+		if cartoon, ok := result["cartoon_image"]; ok {
+			h.db.Model(&a).Update("output_path", fmt.Sprintf("%v", cartoon))
 		}
 
 		h.db.Model(&a).Update("status", "done")

@@ -1,3 +1,4 @@
+import SkeletonCanvas from "../components/SkeletonCanvas";
 import { useState } from 'react';
 import {
   Button,
@@ -48,6 +49,7 @@ export default function AvatarPage({ setPreview }: Props) {
   const [style, setStyle] = useState('realistic');
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
+  const [_animData, setAnimData] = useState<any>(null);
   const [status, setStatus] = useState('');
   const [_avatarId, setAvatarId] = useState('');
 
@@ -104,19 +106,52 @@ export default function AvatarPage({ setPreview }: Props) {
 
       if (ok) {
         const { data: a } = await getAvatar(avatar.id);
-        const photoUrl = a.result ? a.result.replace(/^(\.\/)?uploads\//, '/uploads/') : '';
-        setResultUrl(photoUrl);
         setStatus('done');
         message.success('形象生成完成！');
+
+        // Parse animation data from result
+        let animData = null;
+        let cartoonUrl = '';
+        try {
+          const parsed = JSON.parse(a.result);
+          if (parsed.animation_data) {
+            // Fetch animation JSON
+            const animUrl = parsed.animation_data.replace(/^(.\/)?uploads\//, '/uploads/');
+            const resp = await fetch(animUrl);
+            animData = await resp.json();
+          }
+          if (parsed.cartoon_image) {
+            cartoonUrl = parsed.cartoon_image.replace(/^(.\/)?uploads\//, '/uploads/');
+          }
+        } catch {
+          // Result might be a plain URL
+          cartoonUrl = a.result ? a.result.replace(/^(.\/)?uploads\//, '/uploads/') : '';
+        }
+
+        setResultUrl(cartoonUrl || '');
+        setAnimData(animData);
+
         setPreview({
           visible: true,
           title: `🖼️ ${avatarName}`,
           content: (
             <div>
-              {photoUrl ? (
+              {animData ? (
                 <div>
-                  <img src={photoUrl} alt="avatar" style={{ maxWidth: '100%', borderRadius: 8 }} />
-                  <div style={{ marginTop: 12, color: '#888' }}>形象已生成，可在对话中使用</div>
+                  <SkeletonCanvas
+                    animationData={animData}
+                    cartoonImageUrl={cartoonUrl}
+                    width={400}
+                    height={500}
+                  />
+                  <div style={{ marginTop: 12, color: '#888' }}>
+                    骨骼动画已生成 · 15个关节 · 14根骨骼 · 可做动作
+                  </div>
+                </div>
+              ) : cartoonUrl ? (
+                <div>
+                  <img src={cartoonUrl} alt="avatar" style={{ maxWidth: '100%', borderRadius: 8 }} />
+                  <div style={{ marginTop: 12, color: '#888' }}>形象已生成</div>
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>

@@ -53,7 +53,7 @@ type Avatar struct {
 	PhotoPath  string         `json:"photo_path" gorm:"size:512"`
 	Style      string         `json:"style" gorm:"size:32"` // realistic | cartoon | anime
 	Status     string         `json:"status" gorm:"size:32;default:pending"`
-	Result     string         `json:"result" gorm:"size:512"`   // output file path
+	Result     string         `json:"result" gorm:"type:text"`   // output file path
 	OutputPath string         `json:"output_path" gorm:"size:512"` // generated output file
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
