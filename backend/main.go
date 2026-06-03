@@ -83,6 +83,8 @@ func main() {
 		// Upload & file serving
 		v1.POST("/upload", h.UploadFile)
 		v1.GET("/files/:id", h.ServeFile)
+		// Serve uploaded files directly by filename
+		r.Static("/uploads", uploadsDir)
 
 		// Skills
 		skill := v1.Group("/skills")

@@ -391,7 +391,7 @@ type ChatResponse struct {
 }
 
 type Message struct {
-	ID             string    `json:"id" gorm:"primaryKey"`
+	ID             uint      `json:"id" gorm:"primaryKey;autoIncrement"`
 	ConversationID string    `json:"conversation_id" gorm:"index"`
 	Role           string    `json:"role"`
 	Content        string    `json:"content" gorm:"type:text"`

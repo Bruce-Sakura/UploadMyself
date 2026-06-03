@@ -414,9 +414,10 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 		defer cancel()
 
 		script := fmt.Sprintf("%s/detect_face.py", MLScriptsDir)
+		outputJSON := fmt.Sprintf("%s/%s_face.json", UploadDir, avatarID)
 		cmd := exec.CommandContext(ctx, PythonBin, script,
 			"--input", a.PhotoPath,
-			"--output", fmt.Sprintf("%s/%s_face.json", UploadDir, avatarID),
+			"--output", outputJSON,
 		)
 
 		out, err := cmd.Output()
@@ -426,14 +427,20 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 			return
 		}
 
+		// Read result from output file (not stdout)
 		var result map[string]interface{}
-		if json.Unmarshal(out, &result) == nil {
-			if op, ok := result["output_path"]; ok {
-				h.db.Model(&a).Update("output_path", fmt.Sprintf("%v", op))
-			}
-			if r, ok := result["result"]; ok {
-				h.db.Model(&a).Update("result", fmt.Sprintf("%v", r))
-			}
+		if data, readErr := os.ReadFile(outputJSON); readErr == nil {
+			json.Unmarshal(data, &result)
+		}
+		// Also try stdout
+		if len(out) > 0 {
+			json.Unmarshal(out, &result)
+		}
+
+		// Store the original photo as result (detect_face doesn't generate new image)
+		h.db.Model(&a).Update("result", a.PhotoPath)
+		if op, ok := result["output_path"]; ok {
+			h.db.Model(&a).Update("output_path", fmt.Sprintf("%v", op))
 		}
 
 		h.db.Model(&a).Update("status", "done")

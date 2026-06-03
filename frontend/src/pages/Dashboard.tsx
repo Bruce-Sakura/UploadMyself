@@ -159,6 +159,15 @@ export default function Dashboard() {
                           <Tag color={statusColor[a.status]}>{a.status}</Tag>
                         </>
                       }
+                      cover={
+                        a.result ? (
+                          <img
+                            alt={a.name}
+                            src={a.result.replace('./uploads/', '/uploads/')}
+                            style={{ height: 160, objectFit: 'cover' }}
+                          />
+                        ) : undefined
+                      }
                       actions={[
                         <Popconfirm key="del" title="确认删除？" onConfirm={() => handleDelete('avatar', a.id)}>
                           <DeleteOutlined />

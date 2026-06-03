@@ -104,7 +104,8 @@ export default function AvatarPage({ setPreview }: Props) {
 
       if (ok) {
         const { data: a } = await getAvatar(avatar.id);
-        setResultUrl(a.result);
+        const photoUrl = a.result ? a.result.replace('./uploads/', '/uploads/') : '';
+        setResultUrl(photoUrl);
         setStatus('done');
         message.success('形象生成完成！');
         setPreview({
@@ -112,12 +113,15 @@ export default function AvatarPage({ setPreview }: Props) {
           title: `🖼️ ${avatarName}`,
           content: (
             <div>
-              {a.result ? (
-                <img src={a.result} alt="avatar" style={{ maxWidth: '100%', borderRadius: 8 }} />
+              {photoUrl ? (
+                <div>
+                  <img src={photoUrl} alt="avatar" style={{ maxWidth: '100%', borderRadius: 8 }} />
+                  <div style={{ marginTop: 12, color: '#888' }}>形象已生成，可在对话中使用</div>
+                </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
                   <PictureOutlined style={{ fontSize: 48, marginBottom: 16 }} />
-                  <div>形象已创建，等待生成结果</div>
+                  <div>形象已创建</div>
                 </div>
               )}
             </div>
@@ -209,12 +213,13 @@ export default function AvatarPage({ setPreview }: Props) {
 
   const renderResult = () => {
     if (!resultUrl) return null;
+    const imgUrl = resultUrl.startsWith('/uploads/') ? resultUrl : resultUrl.replace('./uploads/', '/uploads/');
 
     if (tab === '2d') {
       return (
         <Card title="🖼️ 生成结果" style={{ marginTop: 24 }}>
           <Image
-            src={resultUrl}
+            src={imgUrl}
             alt="2D Avatar"
             style={{ maxWidth: '100%', borderRadius: 8 }}
           />
