@@ -1,6 +1,8 @@
 # 🧬 UploadMyself
 
-> **克隆你自己** — 输入照片 + 文本语料 + 语音样本，生成你的数字分身
+> **Clone Yourself** — Upload your photo, text corpus, and voice sample to generate your digital twin.
+
+[中文版](#中文说明)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go 1.22+](https://img.shields.io/badge/go-1.22+-00ADD8.svg)](https://go.dev/)
@@ -8,121 +10,195 @@
 
 ---
 
-## ✨ 功能特性
+## ✨ Features
 
-| 功能 | 说明 | 模型方案 |
-|------|------|---------|
-| 🧠 **思维框架克隆** | 输入文本语料，生成你的思维模式 Skill | 仿女娲 Skill + LLM |
-| 🎤 **语音克隆** | 3-10 分钟音频，克隆你的声音 | GPT-SoVITS / CosyVoice2 |
-| 🖼️ **2D 虚拟形象** | 一张照片生成动态说话视频 | LivePortrait + SadTalker |
-| 🧊 **3D 虚拟形象** | 一张照片生成可交互 3D 模型 | InstantMesh + Three.js |
-| 🔬 **模型蒸馏** | 大模型压缩为轻量版 | 知识蒸馏 pipeline |
+| Feature | Description | Model |
+|---------|-------------|-------|
+| 🧠 **Skill Cloning** | Generate your thinking framework from text corpus | Nuwa-style LLM analysis |
+| 🎤 **Voice Cloning** | Clone your voice from 1-10 min audio | GPT-SoVITS / CosyVoice2 / Fish Speech |
+| 🖼️ **2D Avatar** | One photo → animated talking video | LivePortrait / HunyuanVideo-Avatar |
+| 🧊 **3D Avatar** | One photo → interactive 3D model | InstantMesh / TripoSR + Three.js |
+| 🔬 **Model Distillation** | Compress large models for edge deployment | Knowledge Distillation pipeline |
 
-### 🔀 双模式运行
+### Dual Mode
 
-- **本地模式**：GPU 推理，数据不出本机
-- **云端模式**：调用第三方 API，免部署
-- **混合模式**：核心本地 + 增强云端
-
----
-
-## 🏗️ 技术栈
-
-**后端**：Golang (Gin + GORM + Asynq) + Redis + PostgreSQL
-**前端**：React 18 + TypeScript + Three.js + Ant Design
-**ML**：GPT-SoVITS / CosyVoice2 / LivePortrait / InstantMesh
-
-详见 [PROJECT_PLAN.md](PROJECT_PLAN.md)
+- **Local Mode** — GPU inference, data never leaves your machine
+- **Cloud Mode** — Third-party APIs, zero deployment
+- **Hybrid Mode** — Core local + enhancement via cloud
 
 ---
 
-## 🚀 快速开始
+## 🏗️ Tech Stack
 
-### 环境要求
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | Go (Gin + GORM + Asynq + Viper + Zap) |
+| **Frontend** | React 18 + TypeScript + Three.js + Ant Design |
+| **Database** | PostgreSQL + Redis |
+| **Storage** | MinIO (S3-compatible) |
+| **ML** | PyTorch (called from Go via subprocess/gRPC) |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
 
 - Go 1.22+
 - Node.js 18+
-- CUDA 11.8+ (本地推理需要 NVIDIA GPU)
-- Docker & Docker Compose (推荐)
+- Docker & Docker Compose
+- NVIDIA GPU (for local ML inference)
 
-### 安装
+### Install
 
 ```bash
-# 克隆仓库
 git clone https://github.com/Bruce-Sakura/UploadMyself.git
 cd UploadMyself
 
-# 后端依赖
+# Backend
 cd backend && go mod tidy && cd ..
 
-# 前端依赖
+# Frontend
 cd frontend && npm install && cd ..
 
-# 下载模型
+# Download ML models
 make models-download
 ```
 
-### 启动
+### Run
 
 ```bash
-# 启动依赖服务
+# Start dependencies
 docker-compose up -d redis postgres minio
 
-# 后端
+# Backend (port 8000)
 cd backend && go run .
 
-# 前端
+# Frontend (port 5173)
 cd frontend && npm run dev
 ```
 
-访问 http://localhost:5173
+Open http://localhost:5173
+
+### Build
+
+```bash
+make build          # Build Go binary
+make frontend-build # Build React app
+make test           # Run all tests
+make lint           # Run linters
+```
 
 ---
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 UploadMyself/
-├── backend/          # Golang 后端 (Gin)
-│   ├── api/          # 路由 & Handler
-│   ├── core/         # 核心引擎
-│   │   ├── skill_engine/    # 思维框架克隆
-│   │   ├── voice_engine/    # 语音克隆
-│   │   ├── avatar_engine/   # 虚拟形象
-│   │   └── distill_engine/  # 模型蒸馏
-│   ├── models/       # 数据模型
-│   ├── services/     # 服务层
-│   │   └── provider/ # Provider (本地/云端)
-│   ├── workers/      # Asynq 异步任务
-│   └── config/       # 配置管理
-├── ml/               # ML 模型与脚本 (Python)
-├── frontend/         # React + Three.js 前端
-├── skills/           # 生成的 Skill 存放
-├── docs/             # 文档
-└── tests/            # 测试
+├── backend/                 # Go backend (Gin)
+│   ├── api/                 # Routes & Handlers
+│   ├── config/              # Viper config
+│   ├── core/                # Core engines
+│   │   ├── skill_engine/    # Thinking framework cloning
+│   │   ├── voice_engine/    # Voice cloning
+│   │   ├── avatar_engine/   # 2D/3D avatar
+│   │   └── distill_engine/  # Model distillation
+│   ├── models/              # Data models
+│   ├── services/            # Service layer
+│   │   └── provider/        # Local / Cloud provider
+│   └── workers/             # Asynq async tasks
+├── ml/                      # ML models & Python scripts
+│   ├── models/              # Pretrained weights
+│   └── scripts/             # Preprocessing & training
+├── frontend/                # React + Three.js
+│   └── src/
+│       ├── pages/           # UI pages
+│       └── three/           # 3D rendering
+├── skills/                  # Generated user skills
+├── docs/                    # Documentation
+└── tests/                   # Tests
 ```
 
 ---
 
-## 📖 文档
+## 📖 Docs
 
-- [架构设计](docs/architecture.md)
-- [API 文档](docs/api.md) — 启动后访问 http://localhost:8000/docs
-- [部署指南](docs/deployment.md)
-- [模型说明](docs/models.md)
-
----
-
-## 🤝 贡献
-
-欢迎贡献！请阅读 [contributing.md](docs/contributing.md)
+- [Architecture](docs/architecture.md)
+- [API Reference](docs/api.md) — http://localhost:8000/docs after startup
+- [Deployment Guide](docs/deployment.md)
+- [Model Details](docs/models.md)
+- [Development TODO](TODO.md)
 
 ---
 
-## 📄 许可证
+## 🤝 Contributing
 
-MIT License — 详见 [LICENSE](LICENSE)
+Contributions welcome! See [contributing.md](docs/contributing.md).
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE).
 
 ---
 
 > *"The best way to predict the future is to create it."* — Upload yourself into the digital world.
+
+---
+
+# 中文说明
+
+## 🧬 UploadMyself — 克隆你自己
+
+> 上传你的照片、文本语料、语音样本，生成你的数字分身。
+
+### 功能一览
+
+| 功能 | 说明 | 模型方案 |
+|------|------|---------|
+| 🧠 **思维框架克隆** | 输入文本语料，生成你的思维模式 Skill | 仿女娲 + LLM |
+| 🎤 **语音克隆** | 1-10 分钟音频克隆你的声音 | GPT-SoVITS v2 / CosyVoice2 / Fish Speech v1.5 |
+| 🖼️ **2D 虚拟形象** | 一张照片生成动态说话视频 | LivePortrait / HunyuanVideo-Avatar (2025最新) |
+| 🧊 **3D 虚拟形象** | 一张照片生成可交互 3D 模型 | InstantMesh / TripoSR + Three.js |
+| 🔬 **模型蒸馏** | 大模型压缩，降低部署成本 | NVIDIA TensorRT + 知识蒸馏 |
+
+### 技术栈
+
+- **后端**：Golang (Gin + GORM + Asynq + Viper + Zap)
+- **前端**：React 18 + TypeScript + Three.js + Ant Design
+- **数据库**：PostgreSQL + Redis
+- **存储**：MinIO
+- **ML 推理**：PyTorch (通过 Go subprocess/gRPC 调用)
+
+### 快速开始
+
+```bash
+git clone https://github.com/Bruce-Sakura/UploadMyself.git
+cd UploadMyself
+
+# 后端
+cd backend && go mod tidy && cd ..
+
+# 前端
+cd frontend && npm install && cd ..
+
+# 启动依赖
+docker-compose up -d redis postgres minio
+
+# 启动后端 (端口 8000)
+cd backend && go run .
+
+# 启动前端 (端口 5173)
+cd frontend && npm run dev
+```
+
+### 开发进度
+
+详见 [TODO.md](TODO.md) — 包含 7 个阶段、80+ 个子任务的技术路线图。
+
+### 文档
+
+- [架构设计](docs/architecture.md)
+- [API 文档](docs/api.md)
+- [模型说明](docs/models.md)
