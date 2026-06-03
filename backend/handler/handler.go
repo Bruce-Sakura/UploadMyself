@@ -102,10 +102,17 @@ func (h *Handler) UpdateSkill(c *gin.Context) {
 }
 
 func (h *Handler) DeleteSkill(c *gin.Context) {
-	if err := h.db.Delete(&model.Skill{}, "id = ?", c.Param("id")).Error; err != nil {
+	id := c.Param("id")
+	var s model.Skill
+	if err := h.db.First(&s, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
+	// 删除关联文件
+	outputDir := fmt.Sprintf("%s/%s_output", UploadDir, id)
+	os.RemoveAll(outputDir)
+	h.db.Where("ref_id = ?", id).Delete(&model.Task{})
+	h.db.Delete(&model.Skill{}, "id = ?", id)
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
@@ -148,10 +155,23 @@ func (h *Handler) GetVoice(c *gin.Context) {
 }
 
 func (h *Handler) DeleteVoice(c *gin.Context) {
-	if err := h.db.Delete(&model.Voice{}, "id = ?", c.Param("id")).Error; err != nil {
+	id := c.Param("id")
+	var v model.Voice
+	if err := h.db.First(&v, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
+	// 删除关联文件
+	if v.AudioPath != "" {
+		os.Remove(v.AudioPath)
+	}
+	if v.ModelPath != "" {
+		os.Remove(v.ModelPath)
+	}
+	outputDir := fmt.Sprintf("%s/%s_output", UploadDir, id)
+	os.RemoveAll(outputDir)
+	h.db.Where("ref_id = ?", id).Delete(&model.Task{})
+	h.db.Delete(&model.Voice{}, "id = ?", id)
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
@@ -206,16 +226,16 @@ func (h *Handler) DeleteAvatar(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	// 删除关联文件
+	// 删除所有关联文件
 	if a.PhotoPath != "" {
 		os.Remove(a.PhotoPath)
 	}
 	if a.OutputPath != "" {
 		os.Remove(a.OutputPath)
 	}
-	if a.Result != "" && a.Result != a.PhotoPath {
-		os.Remove(a.Result)
-	}
+	outputDir := fmt.Sprintf("%s/%s_output", UploadDir, id)
+	os.RemoveAll(outputDir)
+	h.db.Where("ref_id = ?", id).Delete(&model.Task{})
 	h.db.Delete(&model.Avatar{}, "id = ?", id)
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }

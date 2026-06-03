@@ -28,7 +28,6 @@ type Skill struct {
 	Result    string         `json:"result" gorm:"type:text"`               // generated SKILL.md
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // Voice — voice clone
@@ -42,7 +41,6 @@ type Voice struct {
 	Status      string         `json:"status" gorm:"size:32;default:pending"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // Avatar — 2D/3D virtual avatar
@@ -57,7 +55,6 @@ type Avatar struct {
 	OutputPath string         `json:"output_path" gorm:"size:512"` // generated output file
 	CreatedAt  time.Time      `json:"created_at"`
 	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // Task — async task tracking
