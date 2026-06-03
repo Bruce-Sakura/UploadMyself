@@ -96,17 +96,10 @@ make lint           # Run linters
 ```
 UploadMyself/
 ├── backend/                 # Go backend (Gin)
-│   ├── api/                 # Routes & Handlers
-│   ├── config/              # Viper config
-│   ├── core/                # Core engines
-│   │   ├── skill_engine/    # Thinking framework cloning
-│   │   ├── voice_engine/    # Voice cloning
-│   │   ├── avatar_engine/   # 2D/3D avatar
-│   │   └── distill_engine/  # Model distillation
-│   ├── models/              # Data models
-│   ├── services/            # Service layer
-│   │   └── provider/        # Local / Cloud provider
-│   └── workers/             # Asynq async tasks
+│   ├── handler/             # HTTP handlers (CRUD)
+│   ├── model/               # GORM models (Skill/Voice/Avatar/Task)
+│   ├── middleware/           # CORS, auth, etc.
+│   └── main.go              # Entry point
 ├── ml/                      # ML models & Python scripts
 │   ├── models/              # Pretrained weights
 │   └── scripts/             # Preprocessing & training

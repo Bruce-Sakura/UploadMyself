@@ -1,50 +1,28 @@
-.PHONY: help build dev test lint clean docker-up docker-down
+.PHONY: help build dev test lint clean
 
-help:  ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-build:  ## Build backend binary
+build: ## Build binary
 	cd backend && go build -o ../bin/uploadmyself .
 
-dev:  ## Start dev (backend + frontend + deps)
-	docker-compose up -d redis postgres minio
-	cd backend && go run . &
-	cd frontend && npm run dev
+dev: ## Run dev server
+	cd backend && go run .
 
-test:  ## Run tests
-	cd backend && go test ./... -v -coverprofile=coverage.out
+test: ## Run tests
+	cd backend && go test ./... -v -count=1
 
-lint:  ## Run linters
+lint: ## Lint Go code
 	cd backend && go vet ./...
-	cd backend && golangci-lint run ./...
 
-format:  ## Format Go code
+format: ## Format code
 	cd backend && gofmt -w .
-	cd backend && goimports -w .
 
-clean:  ## Clean build artifacts
+clean:
 	rm -rf bin/
-	cd backend && go clean -cache
-	rm -rf frontend/node_modules/ frontend/dist/
 
-tidy:  ## Tidy Go modules
-	cd backend && go mod tidy
+docker-up: ## Start deps (Redis + PG)
+	docker-compose up -d redis postgres
 
-models-download:  ## Download ML models
-	bash ml/scripts/download_models.sh
-
-docker-up:  ## Start all services with Docker
-	docker-compose up -d
-
-docker-down:  ## Stop all services
+docker-down: ## Stop deps
 	docker-compose down
-
-# Frontend
-frontend-install:  ## Install frontend deps
-	cd frontend && npm install
-
-frontend-dev:  ## Start frontend dev server
-	cd frontend && npm run dev
-
-frontend-build:  ## Build frontend
-	cd frontend && npm run build
