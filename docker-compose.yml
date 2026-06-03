@@ -39,6 +39,13 @@ services:
       DB_DSN: "host=postgres user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable"
     volumes:
       - uploads:/app/uploads
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     restart: unless-stopped
 
   # ===== Frontend (React + Nginx) =====
