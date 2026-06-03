@@ -1,0 +1,64 @@
+# Pre-existing files (not part of UploadMyself)
+MiMo-7B-Base/
+MiMo-7B-SFT/
+dataset/
+benchmark_mimo.py
+run_mimo_sft_chat.py
+test_mimo_load.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# ML Models (large files)
+ml/models/
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+
+# Data & Uploads
+skills/*/
+uploads/
+outputs/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Docker
+docker-compose.override.yml

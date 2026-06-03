@@ -1,0 +1,91 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: uploadmyself
+      POSTGRES_PASSWORD: uploadmyself
+      POSTGRES_DB: uploadmyself
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uploadmyself"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # --- App Services (uncomment for production) ---
+  
+  # backend:
+  #   build: .
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #     - minio
+  #   env_file: .env
+  #   volumes:
+  #     - ./ml/models:/app/ml/models
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+
+  # celery-worker:
+  #   build: .
+  #   command: celery -A backend.workers.celery_app worker -l info -Q voice,avatar,skill,distill
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   env_file: .env
+  #   volumes:
+  #     - ./ml/models:/app/ml/models
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "5173:80"
+  #   depends_on:
+  #     - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
