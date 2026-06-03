@@ -1,233 +1,93 @@
 # UploadMyself — Development TODO
 
-> Generated: 2026-06-03 | Last Updated: 2026-06-03
+> **核心理念：不是工具集合，是住在电脑里的「你」**
+> 
+> SKILL.md = 你的思维 | Tool = 你的能力 | Voice = 你的声音 | Avatar = 你的外貌
 
-## Legend
-
-- ⬜ Not started
-- 🔵 In progress
-- ✅ Done
-- 🔴 Blocked
-
----
-
-## Phase 0: Project Foundation ✅
+## Phase 1: Agent Core（核心对话引擎）🔵
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 0.1 | Git repo + remote setup | ✅ | github.com/Bruce-Sakura/UploadMyself |
-| 0.2 | Go backend skeleton (Gin) | ✅ | |
-| 0.3 | React frontend skeleton | ✅ | |
-| 0.4 | Docker Compose (Redis/PG/MinIO) | ✅ | |
-| 0.5 | PROJECT_PLAN.md | ✅ | |
+| 1.1 | POST /api/v1/agent/chat 端点 | ⬜ | 核心：接收消息 → 加载 SKILL.md → LLM 推理 → 返回回复 |
+| 1.2 | SKILL.md 作为 system prompt 加载 | ⬜ | 从数据库读取 skill result，注入 LLM 对话 |
+| 1.3 | LLM Provider 接口 | ⬜ | 支持 OpenAI/Qwen/Ollama API 调用 |
+| 1.4 | 对话历史管理 | ⬜ | 多轮对话上下文，存数据库 |
+| 1.5 | WebSocket 实时流 | ⬜ | 流式输出文字，支持中断 |
+
+## Phase 2: 工具系统（技能/能力）⬜
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 2.1 | Tool 注册接口 | ⬜ | POST /api/v1/agent/tools/register |
+| 2.2 | Shell 执行工具 | ⬜ | 运行命令，返回 stdout/stderr |
+| 2.3 | 文件操作工具 | ⬜ | 读写文件，列目录 |
+| 2.4 | 浏览器控制工具 | ⬜ | 搜索/浏览/截图（Playwright） |
+| 2.5 | 代码执行工具 | ⬜ | 运行 Python/JS 代码片段 |
+| 2.6 | 工具调用编排 | ⬜ | LLM function calling → 工具执行 → 结果回传 LLM |
+
+## Phase 3: 思维框架生成（SKILL.md）🔵
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 3.1 | 语料分析 → SKILL.md 生成 | ✅ | analyze_corpus.py + LLM |
+| 3.2 | SKILL.md 模板（仿女娲） | ⬜ | 心智模型 + 决策启发式 + 表达DNA |
+| 3.3 | 质量验证 | ⬜ | 已知测试/边缘测试/风格测试 |
+
+## Phase 4: 语音克隆 🔵
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 4.1 | 音频预处理 | ✅ | preprocess_audio.py |
+| 4.2 | 声音训练 | ✅ | voice_clone_train.py |
+| 4.3 | TTS 合成 | ✅ | voice_synthesize.py |
+| 4.4 | Agent 回复 → 语音输出 | ⬜ | chat 回复自动调用 TTS |
+
+## Phase 5: 虚拟形象 🔵
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 5.1 | 人脸检测 | ✅ | detect_face.py |
+| 5.2 | 2D 形象生成 | ⬜ | LivePortrait |
+| 5.3 | 3D 形象重建 | ⬜ | InstantMesh/TripoSR |
+| 5.4 | Avatar 口型同步 | ⬜ | 音频驱动面部动画 |
+
+## Phase 6: 前端对话界面 ⬜
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 6.1 | 对话页面 | ⬜ | 聊天气泡 + 输入框 + 发送 |
+| 6.2 | 语音输入 | ⬜ | 录音 → STT → 文字 |
+| 6.3 | 语音输出 | ⬜ | Agent 回复 → TTS → 播放 |
+| 6.4 | Avatar 展示 | ⬜ | 3D 模型实时渲染 + 口型同步 |
+| 6.5 | 工具调用可视化 | ⬜ | 显示 Agent 正在执行什么工具 |
+
+## Phase 7: 集成打磨 ⬜
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 7.1 | 完整对话流程 | ⬜ | 文字输入 → 思考 → 工具调用 → 文字+语音+形象输出 |
+| 7.2 | 自定义工具注册 | ⬜ | 用户可添加自己的技能 |
+| 7.3 | Docker 生产部署 | ✅ | docker-compose |
+| 7.4 | CI/CD | ⬜ | GitHub Actions |
 
 ---
 
-## Phase 1: Voice Cloning Engine 🔵
-
-### 1.1 Audio Preprocessing Pipeline
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 1.1.1 | FFmpeg format conversion (any→WAV) | ✅ | `os/exec` ffmpeg | 22050Hz mono WAV |
-| 1.1.2 | Noise reduction | ✅ | Python `noisereduce` via subprocess | Go calls Python script |
-| 1.1.3 | VAD segmentation | ✅ | Energy-based VAD in preprocess_audio.py | ONNX Silero-VAD 可后续升级 |
-| 1.1.4 | Speaker embedding extraction | ⬜ | **Resemblyzer** / **pyannote-audio 3.x** | Extract d-vector / speaker embedding |
-| 1.1.5 | Audio quality validation | ✅ | SNR check + clipping detection | 在 preprocess_audio.py 中 |
-
-### 1.2 Voice Cloning — Local Model
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 1.2.1 | **GPT-SoVITS v2** integration | 🔵 | [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) | 脚本框架已建，待接入真实模型 |
-| 1.2.2 | GPT-SoVITS training worker | ✅ | Go os/exec → voice_clone_train.py | Fine-tune with user audio |
-| 1.2.3 | GPT-SoVITS inference worker | ✅ | Go os/exec → voice_synthesize.py | Text → cloned voice audio |
-| 1.2.4 | **CosyVoice2-0.5B** integration | ⬜ | [FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice) | Streaming TTS, 30-50% fewer errors than v1 |
-| 1.2.5 | **Fish Speech v1.5** integration | ⬜ | [fishaudio/fish-speech](https://github.com/fishaudio/fish-speech) | DualAR, 500M params, 80+ languages, zero-shot |
-| 1.2.6 | Model hot-swap (switch at runtime) | ⬜ | ModelRegistry + Provider pattern | User picks which engine to use |
-
-### 1.3 Voice Cloning — Cloud API
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 1.3.1 | **ElevenLabs** API integration | ⬜ | REST API | Premium quality, $$$ |
-| 1.3.2 | **Fish Audio** cloud API | ⬜ | REST API | Cheaper, S2 Pro model |
-| 1.3.3 | **MiniMax TTS** API | ⬜ | REST API | Good CN quality |
-| 1.3.4 | Unified cloud provider interface | ⬜ | Go `provider.CloudProvider` | Abstract API differences |
-
-### 1.4 Voice Synthesis API
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 1.4.1 | POST /api/v1/voices (upload) | ✅ | Gin + local storage | Store audio |
-| 1.4.2 | POST /api/v1/voices/:id/train | ✅ | Go os/exec → Python | Returns task_id |
-| 1.4.3 | POST /api/v1/voices/:id/synthesize | ✅ | Go os/exec → Python | Text → audio file |
-| 1.4.4 | GET /api/v1/voices/:id | ✅ | GORM | Voice detail + status |
-| 1.4.5 | WebSocket streaming TTS | ⬜ | `gorilla/websocket` | Real-time audio stream |
-
----
-
-## Phase 2: 2D Avatar Engine 🔵
-
-### 2.1 Photo Processing
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 2.1.1 | Face detection + alignment | ✅ | OpenCV Haar cascade in detect_face.py | Detect, crop, align |
-| 2.1.2 | Face quality scoring | ✅ | Laplacian variance blur metric | 在 detect_face.py 中 |
-| 2.1.3 | Background removal | ⬜ | **RMBG-2.0** / `rembg` | Transparent PNG output |
-| 2.1.4 | Style transfer (optional) | ⬜ | Realistic → Cartoon/Anime | SD img2img or dedicated model |
-
-### 2.2 Face Animation — Local
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 2.2.1 | **LivePortrait** integration | ⬜ | [KlingAIResearch/LivePortrait](https://github.com/KlingAIResearch/LivePortrait) | Expression retargeting, stitching control |
-| 2.2.2 | **SadTalker** integration | ⬜ | [OpenTalker/SadTalker](https://github.com/OpenTalker/SadTalker) | Audio→3DMM→face, CVPR 2023 |
-| 2.2.3 | **HunyuanVideo-Avatar** integration | ⬜ | [Tencent/HunyuanVideo-Avatar](https://github.com/Tencent/HunyuanVideo-Avatar) | **NEWEST (2025)**: full-body, multi-char, singing support |
-| 2.2.4 | **Sonic** integration | ⬜ | [jixiaozhong/Sonic](https://github.com/jixiaozhong/Sonic) | Global audio perception, real-time |
-| 2.2.5 | Audio→lip sync pipeline | ⬜ | Wav2Lip or MuseTalk | Dedicated lip-sync quality |
-
-### 2.3 Face Animation — Cloud API
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 2.3.1 | **HeyGen** API | ⬜ | REST API | Enterprise-grade, expensive |
-| 2.3.2 | **D-ID** API | ⬜ | REST API | Good quality, moderate price |
-| 2.3.3 | **Synthesia** API | ⬜ | REST API | Video generation platform |
-
-### 2.4 2D Avatar API
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 2.4.1 | POST /api/v1/avatar/2d/upload | ⬜ | | Photo upload + face detect |
-| 2.4.2 | POST /api/v1/avatar/2d/generate | ⬜ | | Style + generate avatar |
-| 2.4.3 | POST /api/v1/avatar/2d/animate | ⬜ | | Audio → talking video |
-| 2.4.4 | Video output streaming | ⬜ | | Chunked response or WebSocket |
-
----
-
-## Phase 3: 3D Avatar Engine 🔵
-
-### 3.1 3D Reconstruction — Local
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 3.1.1 | **InstantMesh** integration | ⬜ | [TencentARC/InstantMesh](https://github.com/TencentARC/InstantMesh) | Single image → 3D mesh, sparse-view |
-| 3.1.2 | **TripoSR** integration | ⬜ | [VAST-AI-Research/TripoSR](https://github.com/VAST-AI-Research/TripoSR) | MIT license, <0.5s on A100 |
-| 3.1.3 | **SF3D** (Stable Fast 3D) | ⬜ | CVPR 2025 | 0.5s reconstruction with UV texture |
-| 3.1.4 | **3DGS Head Avatar** | ⬜ | CVPR 2025 TensorialGaussianAvatar | Real-time rendering, expressive |
-| 3.1.5 | FLAME/SMPL-X parametric model | ⬜ | SMPL-X for body, FLAME for face | Standard parametric models |
-
-### 3.2 3D Reconstruction — Cloud API
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 3.2.1 | **Tripo3D v2.5** API | ⬜ | REST API (fal.ai / direct) | Best cloud 3D gen, <0.5s |
-| 3.2.2 | **Rodin** API | ⬜ | REST API | By Deemos, good quality |
-| 3.2.3 | **Meshy** API | ⬜ | REST API | Text/Image → 3D |
-
-### 3.3 3D Rendering (Frontend)
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 3.3.1 | GLB/VRM loader | ⬜ | Three.js + `@pixiv/three-vrm` | Load 3D models in browser |
-| 3.3.2 | Real-time BlendShape animation | ⬜ | Three.js morphTargets | Audio → facial expression |
-| 3.3.3 | Orbit controls + interaction | ⬜ | Three.js OrbitControls | Rotate/zoom/pan |
-| 3.3.4 | VRM avatar customization | ⬜ | VRoid SDK | Change clothes/hair/color |
-| 3.3.5 | WebGPU renderer (optional) | ⬜ | Three.js r164+ WebGPU | Better perf on supported browsers |
-
-### 3.4 3D Avatar API
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 3.4.1 | POST /api/v1/avatar/3d/upload | ⬜ | | Multi-photo upload |
-| 3.4.2 | POST /api/v1/avatar/3d/reconstruct | ⬜ | | Photo → 3D model |
-| 3.4.3 | GET /api/v1/avatar/3d/:id/model | ⬜ | | Download GLB/VRM |
-| 3.4.4 | GET /api/v1/avatar/3d/:id/preview | ⬜ | | Three.js render data |
-
----
-
-## Phase 4: Skill Cloning Engine (仿女娲) ⬜
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 4.1 | Corpus collector (text cleaning) | ✅ | analyze_corpus.py | UTF-8, chunk, keyword extraction |
-| 4.2 | LLM analysis (mind model extraction) | 🔵 | **Qwen2.5-72B** / **DeepSeek-V3** / **GPT-4o** | Go handler 调用框架已建 |
-| 4.3 | Decision heuristics extraction | ⬜ | LLM | 5-10 rules |
-| 4.4 | Expression DNA analysis | ⬜ | LLM | Style/syntax/humor |
-| 4.5 | SKILL.md synthesizer | ⬜ | Template + LLM | Nuwa format output |
-| 4.6 | Quality validator (3 test types) | ⬜ | LLM-based evaluation | Sanity/edge/voice check |
-| 4.7 | Local LLM provider (Ollama/vLLM) | ⬜ | HTTP API call | Qwen2.5 / DeepSeek local |
-| 4.8 | Cloud LLM provider | ⬜ | OpenAI/Anthropic/Qwen API | Fallback chain |
-
----
-
-## Phase 5: Model Distillation ⬜
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 5.1 | KD pipeline (teacher→student) | ⬜ | PyTorch + HuggingFace | KL + CE loss |
-| 5.2 | LLM distillation (72B→7B) | ⬜ | NeurIPS 2025 few-shot KD | Counterfactual approach |
-| 5.3 | Voice model distillation | ⬜ | Feature-based KD | CosyVoice Large → Small |
-| 5.4 | NVIDIA TensorRT optimization | ⬜ | TensorRT Model Optimizer | Pruning + quantization |
-| 5.5 | ONNX export + INT8 quantization | ⬜ | `optimum` + `onnxruntime` | Cross-platform deploy |
-| 5.6 | Benchmark (accuracy/speed/size) | ⬜ | Custom eval harness | Before vs After |
-
----
-
-## Phase 6: Frontend UI ⬜
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 6.1 | Home page / onboarding | ✅ | React + Ant Design | 功能列表 + 导航 |
-| 6.2 | Skill clone page | ✅ | | Text upload → SKILL.md preview |
-| 6.3 | Voice clone page | ✅ | | Audio upload → train → preview |
-| 6.4 | 2D avatar page | ✅ | | Photo → animated video player |
-| 6.5 | 3D avatar page | ✅ | React Three Fiber | Interactive 3D viewer |
-| 6.6 | Playground (combined) | ⬜ | | Chat + voice + 3D avatar |
-| 6.7 | Settings (provider/model) | ⬜ | | Switch local/cloud per module |
-| 6.8 | Task queue dashboard | ⬜ | | Real-time progress |
-
----
-
-## Phase 7: Integration & Polish ⬜
-
-| # | Task | Status | Tech | Notes |
-|---|------|--------|------|-------|
-| 7.1 | User auth (JWT) | ⬜ | Go JWT middleware | Optional for local use |
-| 7.2 | PostgreSQL models + migrations | ✅ | GORM AutoMigrate | User/Skill/Voice/Avatar/Task/FileUpload |
-| 7.3 | File upload integration | ✅ | Gin multipart + local FS | POST /api/v1/upload |
-| 7.4 | WebSocket real-time updates | ⬜ | gorilla/websocket | Task progress push |
-| 7.5 | Docker production compose | ⬜ | Multi-stage build | Go binary + Node + Python ML |
-| 7.6 | CI/CD (GitHub Actions) | ⬜ | | Lint + test + build + push |
-| 7.7 | API documentation (Swagger) | ⬜ | `swaggo/swag` | Auto-gen from Go comments |
-| 7.8 | E2E tests | ⬜ | Playwright (frontend) + Go test | Full flow test |
-
----
-
-## Priority Order (Recommended)
+## 开发优先级
 
 ```
-Week 1-2:  Phase 1 (Voice) — most standalone, clear I/O
-Week 3-4:  Phase 2 (2D Avatar) — photo → video, high visual impact
-Week 5-6:  Phase 4 (Skill) — LLM-heavy, depends on provider setup
-Week 7-8:  Phase 3 (3D Avatar) — complex but incremental
-Week 9-10: Phase 6 (Frontend) — wire up all backends
-Week 11-12: Phase 5 (Distill) + Phase 7 (Polish)
+Week 1:   Phase 1 (Agent Core) — 让它能对话
+Week 2:   Phase 2 (Tool System) — 让它能做事
+Week 3:   Phase 3+4 (SKILL + Voice) — 让它像你
+Week 4:   Phase 6 (Frontend) — 让你能看到它
+Week 5-6: Phase 5+7 (Avatar + Polish) — 完善
 ```
 
----
+## 关键设计决策
 
-## Key Tech Decisions
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Voice primary model | **GPT-SoVITS v2** | Best CN few-shot, 1-min training |
-| Voice alternative | **Fish Speech v1.5** | 500M params, 80+ lang, zero-shot |
-| 2D animation primary | **HunyuanVideo-Avatar** | Newest (2025), full-body, singing |
-| 2D animation fallback | **LivePortrait** + **SadTalker** | Mature, well-tested |
-| 3D reconstruction | **TripoSR** (local) + **Tripo3D v2.5** (cloud) | MIT + fastest cloud |
-| LLM for Skill | **Qwen2.5-72B** (local) / **GPT-4o** (cloud) | Best CN reasoning |
-| Distillation | **NVIDIA TensorRT Model Optimizer** | Production-grade pruning+KD |
-| Go ↔ Python bridge | **os/exec** → Python subprocess | Simplest, decoupled |
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| Agent 核心 | **LLM function calling** | 标准化工具调用，兼容所有主流 LLM |
+| SKILL.md 用途 | **System prompt** | 不是文档，是 Agent 的大脑 |
+| 工具执行 | **Go subprocess** | 安全隔离，支持任何语言的工具 |
+| 前端通信 | **WebSocket** | 实时流式输出，低延迟 |
+| 语音输出 | **流式 TTS** | Agent 回复一段就播一段，不用等全部生成 |

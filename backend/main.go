@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Bruce-Sakura/UploadMyself/backend/agent"
 	"github.com/Bruce-Sakura/UploadMyself/backend/handler"
 	"github.com/Bruce-Sakura/UploadMyself/backend/middleware"
 	"github.com/Bruce-Sakura/UploadMyself/backend/model"
@@ -19,9 +20,13 @@ func main() {
 	// Config
 	viper.AutomaticEnv()
 	viper.SetDefault("APP_PORT", 8000)
-	viper.SetDefault("DB_DSN", "host=localhost user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable")
+	viper.SetDefault("DB_DSN", "host=localhost user=uploadmyself password=*** dbname=uploadmyself port=5432 sslmode=disable")
 	viper.SetDefault("ML_SCRIPTS_DIR", "../ml/scripts")
 	viper.SetDefault("PYTHON_BIN", "python3")
+	// LLM 配置
+	viper.SetDefault("LLM_API_KEY", "")
+	viper.SetDefault("LLM_BASE_URL", "https://api.openai.com/v1")
+	viper.SetDefault("LLM_MODEL", "gpt-4o")
 
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
@@ -44,6 +49,19 @@ func main() {
 	}
 	logger.Info("database connected")
 
+	// Auto-migrate agent models
+	db.AutoMigrate(&agent.Message{})
+
+	// LLM Client
+	llmClient := agent.NewLLMClient(
+		viper.GetString("LLM_API_KEY"),
+		viper.GetString("LLM_BASE_URL"),
+		viper.GetString("LLM_MODEL"),
+	)
+
+	// Agent
+	agt := agent.New(db, llmClient)
+
 	// Router
 	r := gin.Default()
 	r.Use(middleware.CORS())
@@ -52,9 +70,16 @@ func main() {
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
 	// API v1
-	h := handler.New(db)
+	h := handler.New(db, agt)
 	v1 := r.Group("/api/v1")
 	{
+		// Agent（核心对话）
+		agentGroup := v1.Group("/agent")
+		{
+			agentGroup.POST("/chat", h.AgentChat)
+			agentGroup.GET("/tools", h.ListTools)
+		}
+
 		// Upload & file serving
 		v1.POST("/upload", h.UploadFile)
 		v1.GET("/files/:id", h.ServeFile)

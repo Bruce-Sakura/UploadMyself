@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/Bruce-Sakura/UploadMyself/backend/agent"
 	"github.com/Bruce-Sakura/UploadMyself/backend/model"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,11 +22,12 @@ var (
 )
 
 type Handler struct {
-	db *gorm.DB
+	db    *gorm.DB
+	agent *agent.Agent
 }
 
-func New(db *gorm.DB) *Handler {
-	return &Handler{db: db}
+func New(db *gorm.DB, agt *agent.Agent) *Handler {
+	return &Handler{db: db, agent: agt}
 }
 
 // ==================== Skills ====================
