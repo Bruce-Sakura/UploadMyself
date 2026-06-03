@@ -1,4 +1,4 @@
-module github.com/Bruce-Sakura/UploadMyself
+module github.com/Bruce-Sakura/UploadMyself/backend
 
 go 1.22
 

@@ -1,10 +1,8 @@
-torch>=2.3
-torchaudio>=2.3
+# Minimal dependencies for Docker build (no PyTorch - install separately when needed)
 numpy>=1.26
-librosa>=0.10
+scipy>=1.11
 soundfile>=0.12
 noisereduce>=3.0
 pydub>=0.25
-onnxruntime>=1.17
 requests>=2.31
 opencv-python-headless>=4.9
