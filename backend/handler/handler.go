@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"time"
 
@@ -244,11 +245,14 @@ func (h *Handler) TrainVoice(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 
+		// Write config JSON for voice_clone_train.py
+		configPath := fmt.Sprintf("%s/%s_train_config.json", UploadDir, voiceID)
+		configData := fmt.Sprintf(`{"voice_id":"%s","audio_path":"%s","name":"%s"}`, voiceID, v.AudioPath, v.Name)
+		os.WriteFile(configPath, []byte(configData), 0644)
+
 		script := fmt.Sprintf("%s/voice_clone_train.py", MLScriptsDir)
 		cmd := exec.CommandContext(ctx, PythonBin, script,
-			"--voice-id", voiceID,
-			"--audio-path", v.AudioPath,
-			"--name", v.Name,
+			"--config", configPath,
 		)
 
 		out, err := cmd.Output()
@@ -293,12 +297,14 @@ func (h *Handler) SynthesizeVoice(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
+	outputPath := fmt.Sprintf("%s/%s_synth.wav", UploadDir, voiceID)
+
 	script := fmt.Sprintf("%s/voice_synthesize.py", MLScriptsDir)
 	cmd := exec.CommandContext(ctx, PythonBin, script,
 		"--voice-id", voiceID,
-		"--model-path", v.ModelPath,
-		"--ref-audio", v.RefAudioPath,
 		"--text", body.Text,
+		"--output", outputPath,
+		"--model-dir", UploadDir,
 	)
 
 	out, err := cmd.Output()
@@ -342,11 +348,15 @@ func (h *Handler) ProcessSkill(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
+		// Write corpus to temp file
+		corpusPath := fmt.Sprintf("%s/%s_corpus.txt", UploadDir, skillID)
+		os.WriteFile(corpusPath, []byte(s.Corpus), 0644)
+		resultPath := fmt.Sprintf("%s/%s_analysis.json", UploadDir, skillID)
+
 		script := fmt.Sprintf("%s/analyze_corpus.py", MLScriptsDir)
 		cmd := exec.CommandContext(ctx, PythonBin, script,
-			"--skill-id", skillID,
-			"--corpus", s.Corpus,
-			"--name", s.Name,
+			"--input", corpusPath,
+			"--output", resultPath,
 		)
 
 		out, err := cmd.Output()
@@ -356,11 +366,19 @@ func (h *Handler) ProcessSkill(c *gin.Context) {
 			return
 		}
 
+		// Read result JSON
 		var result map[string]interface{}
-		if json.Unmarshal(out, &result) == nil {
-			if sk, ok := result["skill_md"]; ok {
-				h.db.Model(&s).Update("result", fmt.Sprintf("%v", sk))
-			}
+		if data, readErr := os.ReadFile(resultPath); readErr == nil {
+			json.Unmarshal(data, &result)
+		}
+		if len(out) > 0 {
+			json.Unmarshal(out, &result)
+		}
+		// For now, store the analysis as the skill result
+		if r, ok := result["analysis"]; ok {
+			h.db.Model(&s).Update("result", fmt.Sprintf("%v", r))
+		} else if len(out) > 0 {
+			h.db.Model(&s).Update("result", string(out))
 		}
 
 		h.db.Model(&s).Updates(map[string]interface{}{"status": "done"})
@@ -397,10 +415,8 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 
 		script := fmt.Sprintf("%s/detect_face.py", MLScriptsDir)
 		cmd := exec.CommandContext(ctx, PythonBin, script,
-			"--avatar-id", avatarID,
-			"--photo-path", a.PhotoPath,
-			"--type", a.Type,
-			"--style", a.Style,
+			"--input", a.PhotoPath,
+			"--output", fmt.Sprintf("%s/%s_face.json", UploadDir, avatarID),
 		)
 
 		out, err := cmd.Output()

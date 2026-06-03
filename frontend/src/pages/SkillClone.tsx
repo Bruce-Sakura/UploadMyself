@@ -12,7 +12,6 @@ import {
 } from 'antd';
 import {
   ExperimentOutlined,
-  CopyOutlined,
   CheckCircleOutlined,
   LoadingOutlined,
   CloseCircleOutlined,
@@ -24,6 +23,7 @@ import {
   getTask,
 } from '../api/endpoints';
 import type { Task } from '../api/types';
+import type { PreviewState } from '../App';
 
 const { TextArea } = Input;
 const { Title, Paragraph } = Typography;
@@ -36,12 +36,18 @@ const STATUS_MAP: Record<string, { color: string; icon: React.ReactNode; text: s
   failed: { color: 'error', icon: <CloseCircleOutlined />, text: '失败' },
 };
 
-export default function SkillClone() {
+interface Props {
+  setPreview: (p: PreviewState) => void;
+}
+
+export default function SkillClone({ setPreview }: Props) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string>('');
   const [status, setStatus] = useState<string>('');
-  const [skillId, setSkillId] = useState<string>('');
+
+  const showInPreview = (title: string, content: React.ReactNode) => {
+    setPreview({ visible: true, title, content });
+  };
 
   const pollTask = async (taskId: string) => {
     let attempts = 0;
@@ -52,8 +58,22 @@ export default function SkillClone() {
         const { data: task } = await getTask(taskId) as { data: Task };
         if (task.status === 'done' || task.status === 'completed') {
           const { data: skill } = await getSkill(task.ref_id);
-          setResult(skill.result);
           setStatus('done');
+          // 在右侧预览区显示结果
+          showInPreview('🧠 生成的思维框架', (
+            <pre style={{
+              background: '#f6f8fa',
+              padding: 16,
+              borderRadius: 8,
+              overflow: 'auto',
+              maxHeight: 'calc(100vh - 240px)',
+              fontSize: 13,
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {skill.result}
+            </pre>
+          ));
           message.success('思维框架生成成功！');
           return;
         }
@@ -63,6 +83,15 @@ export default function SkillClone() {
           return;
         }
         setStatus(task.status);
+        // 处理中也更新预览
+        showInPreview('⏳ 处理中...', (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin size="large" />
+            <div style={{ marginTop: 16, color: '#888' }}>
+              AI 正在分析你的语料，生成思维框架…
+            </div>
+          </div>
+        ));
       } catch {
         // continue polling
       }
@@ -72,12 +101,17 @@ export default function SkillClone() {
 
   const onFinish = async (values: { name: string; corpus: string }) => {
     setLoading(true);
-    setResult('');
     setStatus('pending');
     try {
       const { data: skill } = await createSkill(values);
-      setSkillId(skill.id);
       setStatus('processing');
+
+      showInPreview('⏳ 处理中...', (
+        <div style={{ textAlign: 'center', padding: 40 }}>
+          <Spin size="large" />
+          <div style={{ marginTop: 16, color: '#888' }}>正在提交任务…</div>
+        </div>
+      ));
 
       const { data: task } = await processSkill(skill.id);
       await pollTask(task.id);
@@ -88,11 +122,6 @@ export default function SkillClone() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const copyResult = () => {
-    navigator.clipboard.writeText(result);
-    message.success('已复制到剪贴板');
   };
 
   const statusInfo = status ? STATUS_MAP[status] ?? STATUS_MAP.pending : null;
@@ -106,7 +135,7 @@ export default function SkillClone() {
         上传你的文本语料，AI 将分析并生成属于你的思维 Skill 框架。
       </Paragraph>
 
-      <Card style={{ marginBottom: 24 }}>
+      <Card>
         <Form form={form} layout="vertical" onFinish={onFinish}>
           <Form.Item
             label="框架名称"
@@ -149,47 +178,6 @@ export default function SkillClone() {
           </Form.Item>
         </Form>
       </Card>
-
-      {loading && status === 'processing' && (
-        <Card>
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin size="large" />
-            <Paragraph style={{ marginTop: 16 }}>
-              AI 正在分析你的语料，生成思维框架…
-            </Paragraph>
-            {skillId && (
-              <Paragraph type="secondary" style={{ fontSize: 12 }}>
-                Skill ID: {skillId}
-              </Paragraph>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {result && (
-        <Card
-          title="生成结果 — SKILL.md"
-          extra={
-            <Button icon={<CopyOutlined />} onClick={copyResult}>
-              复制
-            </Button>
-          }
-        >
-          <pre
-            style={{
-              background: '#f6f8fa',
-              padding: 16,
-              borderRadius: 8,
-              overflow: 'auto',
-              maxHeight: 500,
-              fontSize: 13,
-              lineHeight: 1.6,
-            }}
-          >
-            {result}
-          </pre>
-        </Card>
-      )}
     </div>
   );
 }

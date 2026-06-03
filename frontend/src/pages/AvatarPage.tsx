@@ -27,6 +27,7 @@ import {
   getTask,
 } from '../api/endpoints';
 import type { Task } from '../api/types';
+import type { PreviewState } from '../App';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -36,7 +37,11 @@ const STYLE_OPTIONS = [
   { value: 'anime', label: '动漫风格' },
 ];
 
-export default function AvatarPage() {
+interface Props {
+  setPreview: (p: PreviewState) => void;
+}
+
+export default function AvatarPage({ setPreview }: Props) {
   const [tab, setTab] = useState<'2d' | '3d'>('2d');
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [avatarName, setAvatarName] = useState('');
@@ -102,6 +107,22 @@ export default function AvatarPage() {
         setResultUrl(a.result);
         setStatus('done');
         message.success('形象生成完成！');
+        setPreview({
+          visible: true,
+          title: `🖼️ ${avatarName}`,
+          content: (
+            <div>
+              {a.result ? (
+                <img src={a.result} alt="avatar" style={{ maxWidth: '100%', borderRadius: 8 }} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
+                  <PictureOutlined style={{ fontSize: 48, marginBottom: 16 }} />
+                  <div>形象已创建，等待生成结果</div>
+                </div>
+              )}
+            </div>
+          ),
+        });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '生成失败';

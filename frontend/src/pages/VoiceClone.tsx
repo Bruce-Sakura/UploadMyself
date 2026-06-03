@@ -18,12 +18,17 @@ import {
 import type { UploadFile } from 'antd/es/upload/interface';
 import { uploadFile, createVoice, trainVoice, synthesizeVoice, getTask, getVoice } from '../api/endpoints';
 import type { Task } from '../api/types';
+import type { PreviewState } from '../App';
 
 const { Title, Paragraph, Text } = Typography;
 const { Dragger } = Upload;
 const { TextArea } = Input;
 
-export default function VoiceClone() {
+interface Props {
+  setPreview: (p: PreviewState) => void;
+}
+
+export default function VoiceClone({ setPreview }: Props) {
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [voiceName, setVoiceName] = useState('');
   const [training, setTraining] = useState(false);
@@ -95,6 +100,18 @@ export default function VoiceClone() {
         const { data: v } = await getVoice(voice.id);
         setVoiceStatus(v.status);
         message.success('声音训练完成！');
+        setPreview({
+          visible: true,
+          title: '🎤 声音训练完成',
+          content: (
+            <div>
+              <p><strong>名称:</strong> {voiceName}</p>
+              <p><strong>ID:</strong> {voiceId}</p>
+              <p><strong>状态:</strong> 已就绪</p>
+              <p style={{ color: '#888', marginTop: 16 }}>在下方输入文本，点击合成即可试听</p>
+            </div>
+          ),
+        });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '训练失败';
@@ -121,6 +138,16 @@ export default function VoiceClone() {
       const { data } = await synthesizeVoice(voiceId, synthText);
       setAudioUrl(data.audio_url);
       message.success('语音合成完成！');
+      setPreview({
+        visible: true,
+        title: '🔊 合成结果',
+        content: (
+          <div>
+            <p><strong>文本:</strong> {synthText.slice(0, 100)}...</p>
+            <audio controls src={data.audio_url} style={{ width: '100%', marginTop: 16 }} />
+          </div>
+        ),
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '合成失败';
       message.error(msg);
