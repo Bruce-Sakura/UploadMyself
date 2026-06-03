@@ -163,7 +163,7 @@ export default function Dashboard() {
                         a.result ? (
                           <img
                             alt={a.name}
-                            src={a.result.replace('./uploads/', '/uploads/')}
+                            src={(a.result || '').replace(/^(\.\/)?uploads\//, '/uploads/')}
                             style={{ height: 160, objectFit: 'cover' }}
                           />
                         ) : undefined

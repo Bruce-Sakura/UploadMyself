@@ -104,7 +104,7 @@ export default function AvatarPage({ setPreview }: Props) {
 
       if (ok) {
         const { data: a } = await getAvatar(avatar.id);
-        const photoUrl = a.result ? a.result.replace('./uploads/', '/uploads/') : '';
+        const photoUrl = a.result ? a.result.replace(/^(\.\/)?uploads\//, '/uploads/') : '';
         setResultUrl(photoUrl);
         setStatus('done');
         message.success('形象生成完成！');
@@ -213,7 +213,7 @@ export default function AvatarPage({ setPreview }: Props) {
 
   const renderResult = () => {
     if (!resultUrl) return null;
-    const imgUrl = resultUrl.startsWith('/uploads/') ? resultUrl : resultUrl.replace('./uploads/', '/uploads/');
+    const imgUrl = resultUrl.startsWith('/uploads/') ? resultUrl : resultUrl.replace(/^(\.\/)?uploads\//, '/uploads/');
 
     if (tab === '2d') {
       return (
