@@ -38,8 +38,8 @@ services:
       ML_SCRIPTS_DIR: "/app/ml/scripts"
       DB_DSN: "host=postgres user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable"
       LLM_API_KEY: "${LLM_API_KEY:-}"
-      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.openai.com/v1}"
-      LLM_MODEL: "${LLM_MODEL:-gpt-4o}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-https://token-plan-sgp.xiaomimimo.com/v1}"
+      LLM_MODEL: "${LLM_MODEL:-mimo-v2.5-pro}"
     volumes:
       - uploads:/app/uploads
     deploy:
