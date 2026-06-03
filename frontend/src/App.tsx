@@ -5,16 +5,19 @@ import {
   ExperimentOutlined,
   SoundOutlined,
   PictureOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 import SkillClone from './pages/SkillClone';
 import VoiceClone from './pages/VoiceClone';
 import AvatarPage from './pages/AvatarPage';
+import Dashboard from './pages/Dashboard';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
 
 const menuItems = [
   { key: '/', icon: <HomeOutlined />, label: '首页' },
+  { key: '/dashboard', icon: <DashboardOutlined />, label: '我的分身' },
   { key: '/skill', icon: <ExperimentOutlined />, label: '思维克隆' },
   { key: '/voice', icon: <SoundOutlined />, label: '语音克隆' },
   { key: '/avatar', icon: <PictureOutlined />, label: '虚拟形象' },
@@ -126,6 +129,7 @@ function App() {
         >
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/skill" element={<SkillClone />} />
             <Route path="/voice" element={<VoiceClone />} />
             <Route path="/avatar" element={<AvatarPage />} />
