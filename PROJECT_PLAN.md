@@ -18,16 +18,18 @@ UploadMyself 是一个**全栈数字人克隆平台**，用户只需提供：
 
 ## 二、技术栈选型
 
-### 后端（Python）
+### 后端（Golang）
 
 | 层级 | 技术 | 理由 |
 |------|------|------|
-| Web 框架 | **FastAPI** | 异步、高性能、自带 OpenAPI 文档 |
-| 任务队列 | **Celery + Redis** | 重量级推理任务异步处理 |
-| 数据库 | **PostgreSQL + SQLAlchemy** | 用户数据、任务状态、生成历史 |
-| 缓存 | **Redis** | 会话缓存、任务状态 |
+| Web 框架 | **Gin** | Go 生态最成熟、高性能、中间件丰富 |
+| 任务队列 | **Asynq** (基于 Redis) | Go 原生异步任务队列，轻量可靠 |
+| ORM | **GORM** | Go 生态主流 ORM，支持 PostgreSQL |
+| 数据库 | **PostgreSQL** | 可靠、支持 JSON、全文搜索 |
+| 缓存 | **Redis** | 会话缓存、任务状态、Asynq 底层 |
 | 存储 | **MinIO / 本地 FS** | 音频/图片/模型文件存储 |
-| ML 框架 | **PyTorch** | 统一推理引擎，所有模型共用 |
+| 配置 | **Viper** | 支持 .env / YAML / 环境变量 |
+| 日志 | **Zap** | 高性能结构化日志 |
 
 ### ML / AI 模块
 
@@ -67,81 +69,33 @@ UploadMyself/
 ├── Makefile                            # 常用命令
 ├── .env.example                        # 环境变量模板
 │
-├── backend/                            # 后端服务
-│   ├── __init__.py
-│   ├── main.py                         # FastAPI 入口
-│   ├── config.py                       # 配置管理
-│   ├── api/                            # API 路由
-│   │   ├── __init__.py
-│   │   ├── auth.py                     # 认证
-│   │   ├── skill.py                    # 思维框架 Skill 生成 API
-│   │   ├── voice.py                    # 语音克隆 API
-│   │   ├── avatar_2d.py                # 2D 数字人 API
-│   │   ├── avatar_3d.py                # 3D 数字人 API
-│   │   ├── distill.py                  # 模型蒸馏 API
-│   │   └── tasks.py                    # 异步任务状态查询
-│   │
-│   ├── core/                           # 核心业务逻辑
-│   │   ├── __init__.py
-│   │   ├── skill_engine/               # 思维框架引擎（仿女娲）
-│   │   │   ├── __init__.py
-│   │   │   ├── collector.py            # 语料采集与清洗
-│   │   │   ├── analyzer.py             # 思维模式分析
-│   │   │   ├── extractor.py            # 心智模型提取
-│   │   │   ├── synthesizer.py          # 框架合成
-│   │   │   ├── validator.py            # 质量验证
-│   │   │   └── templates/              # Skill 输出模板
-│   │   │       ├── skill_template.md
-│   │   │       └── persona_template.md
-│   │   │
+├── backend/                            # 后端服务 (Golang)
+│   ├── go.mod                          # Go 模块定义
+│   ├── main.go                         # 入口
+│   ├── api/                            # 路由 & Handler
+│   │   ├── router.go                   # 路由配置
+│   │   └── handlers.go                 # API Handler
+│   ├── config/                         # 配置管理
+│   │   └── config.go
+│   ├── core/                           # 核心引擎
+│   │   ├── skill_engine/               # 思维框架引擎
+│   │   │   └── engine.go
 │   │   ├── voice_engine/               # 语音克隆引擎
-│   │   │   ├── __init__.py
-│   │   │   ├── trainer.py              # 声音模型训练/微调
-│   │   │   ├── synthesizer.py          # 语音合成推理
-│   │   │   ├── preprocessor.py         # 音频预处理(降噪/切片/VAD)
-│   │   │   └── speaker.py              # 说话人特征提取
-│   │   │
+│   │   │   └── engine.go
 │   │   ├── avatar_engine/              # 虚拟形象引擎
-│   │   │   ├── __init__.py
-│   │   │   ├── photo_processor.py      # 照片预处理(人脸检测/对齐)
-│   │   │   ├── avatar_2d.py            # 2D 形象生成与驱动
-│   │   │   ├── avatar_3d.py            # 3D 形象重建
-│   │   │   ├── animator.py             # 动画驱动(口型/表情/动作)
-│   │   │   └── renderer.py             # 渲染输出
-│   │   │
+│   │   │   └── engine.go
 │   │   └── distill_engine/             # 模型蒸馏引擎
-│   │       ├── __init__.py
-│   │       ├── teacher.py              # 教师模型管理
-│   │       ├── student.py              # 学生模型构建
-│   │       ├── pipeline.py             # 蒸馏训练流程
-│   │       └── evaluator.py            # 蒸馏效果评估
-│   │
+│   │       └── engine.go
 │   ├── models/                         # 数据模型
-│   │   ├── __init__.py
-│   │   ├── user.py
-│   │   ├── skill.py
-│   │   ├── voice.py
-│   │   ├── avatar.py
-│   │   └── task.py
-│   │
+│   │   └── models.go
 │   ├── services/                       # 服务层
-│   │   ├── __init__.py
-│   │   ├── storage.py                  # 文件存储服务
-│   │   ├── queue.py                    # 任务队列
-│   │   ├── model_registry.py           # 模型注册与管理
-│   │   └── provider/                   # 模型提供者(本地/云端切换)
-│   │       ├── __init__.py
-│   │       ├── base.py                 # 抽象基类
-│   │       ├── local_provider.py       # 本地模型推理
-│   │       └── cloud_provider.py       # 云端 API 调用
-│   │
-│   └── workers/                        # Celery 异步任务
-│       ├── __init__.py
-│       ├── celery_app.py
-│       ├── skill_worker.py
-│       ├── voice_worker.py
-│       ├── avatar_worker.py
-│       └── distill_worker.py
+│   │   ├── services.go                 # 服务聚合
+│   │   └── provider/                   # 模型提供者
+│   │       ├── provider.go             # 接口定义
+│   │       ├── local.go                # 本地推理
+│   │       └── cloud.go                # 云端 API
+│   └── workers/                        # Asynq 异步任务
+│       └── workers.go
 │
 ├── ml/                                 # ML 模型与脚本
 │   ├── models/                         # 预训练模型存放
@@ -479,9 +433,9 @@ WS     /api/v1/ws/stream                  # WebSocket 实时流(语音/视频)
 
 ### 开发环境
 ```bash
-# 后端
-cd backend && pip install -e ".[dev]"
-uvicorn backend.main:app --reload
+# 后端 (Go)
+cd backend && go build -o ../bin/uploadmyself .
+cd backend && go run .
 
 # 前端
 cd frontend && npm install && npm run dev
@@ -512,31 +466,26 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ## 九、关键依赖
 
-```toml
-[project]
-dependencies = [
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.29",
-    "celery[redis]>=5.4",
-    "sqlalchemy[asyncio]>=2.0",
-    "asyncpg>=0.29",
-    "redis>=5.0",
-    "minio>=7.2",
-    "torch>=2.3",
-    "torchaudio>=2.3",
-    "torchvision>=0.18",
-    "numpy>=1.26",
-    "librosa>=0.10",
-    "soundfile>=0.12",
-    "insightface>=0.7",
-    "onnxruntime-gpu>=1.17",
-    "diffusers>=0.28",
-    "transformers>=4.40",
-    "accelerate>=0.30",
-    "pydantic>=2.7",
-    "python-multipart>=0.0.9",
-]
+### 后端 (Go)
+
+```go
+// go.mod
+go 1.22
+
+github.com/gin-gonic/gin v1.10.0          // Web 框架
+github.com/hibiken/asynq v0.25.1           // 异步任务队列
+github.com/redis/go-redis/v9 v9.7.0       // Redis 客户端
+github.com/spf13/viper v1.19.0             // 配置管理
+github.com/google/uuid v1.6.0              // UUID
+go.uber.org/zap v1.27.0                    // 日志
+gorm.io/gorm v1.25.12                      // ORM
+gorm.io/driver/postgres v1.5.11            // PostgreSQL 驱动
+github.com/minio/minio-go/v7 v7.0.82      // MinIO 客户端
 ```
+
+### ML (Python)
+
+ML 推理脚本仍使用 Python，通过 Go 的 `os/exec` 或 gRPC 调用：
 
 ---
 

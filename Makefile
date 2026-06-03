@@ -1,33 +1,34 @@
-.PHONY: help install dev test lint clean
+.PHONY: help build dev test lint clean docker-up docker-down
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-install:  ## Install all dependencies
-	pip install -e ".[dev]"
-	cd frontend && npm install
+build:  ## Build backend binary
+	cd backend && go build -o ../bin/uploadmyself .
 
-dev:  ## Start dev servers
+dev:  ## Start dev (backend + frontend + deps)
 	docker-compose up -d redis postgres minio
-	uvicorn backend.main:app --reload --port 8000 &
+	cd backend && go run . &
 	cd frontend && npm run dev
 
 test:  ## Run tests
-	pytest tests/ -v --cov=backend
+	cd backend && go test ./... -v -coverprofile=coverage.out
 
 lint:  ## Run linters
-	ruff check backend/ tests/
-	ruff format --check backend/ tests/
-	mypy backend/
+	cd backend && go vet ./...
+	cd backend && golangci-lint run ./...
 
-format:  ## Format code
-	ruff format backend/ tests/
-	ruff check --fix backend/ tests/
+format:  ## Format Go code
+	cd backend && gofmt -w .
+	cd backend && goimports -w .
 
 clean:  ## Clean build artifacts
-	find . -type d -name __pycache__ -exec rm -rf {} +
-	find . -type d -name "*.egg-info" -exec rm -rf {} +
-	rm -rf .pytest_cache .mypy_cache .ruff_cache dist build
+	rm -rf bin/
+	cd backend && go clean -cache
+	rm -rf frontend/node_modules/ frontend/dist/
+
+tidy:  ## Tidy Go modules
+	cd backend && go mod tidy
 
 models-download:  ## Download ML models
 	bash ml/scripts/download_models.sh
@@ -37,3 +38,13 @@ docker-up:  ## Start all services with Docker
 
 docker-down:  ## Stop all services
 	docker-compose down
+
+# Frontend
+frontend-install:  ## Install frontend deps
+	cd frontend && npm install
+
+frontend-dev:  ## Start frontend dev server
+	cd frontend && npm run dev
+
+frontend-build:  ## Build frontend
+	cd frontend && npm run build

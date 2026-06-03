@@ -3,7 +3,8 @@
 > **克隆你自己** — 输入照片 + 文本语料 + 语音样本，生成你的数字分身
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Go 1.22+](https://img.shields.io/badge/go-1.22+-00ADD8.svg)](https://go.dev/)
+[![React 18](https://img.shields.io/badge/react-18-61DAFB.svg)](https://react.dev/)
 
 ---
 
@@ -27,7 +28,7 @@
 
 ## 🏗️ 技术栈
 
-**后端**：FastAPI + Celery + PostgreSQL + Redis + PyTorch
+**后端**：Golang (Gin + GORM + Asynq) + Redis + PostgreSQL
 **前端**：React 18 + TypeScript + Three.js + Ant Design
 **ML**：GPT-SoVITS / CosyVoice2 / LivePortrait / InstantMesh
 
@@ -39,7 +40,7 @@
 
 ### 环境要求
 
-- Python 3.10+
+- Go 1.22+
 - Node.js 18+
 - CUDA 11.8+ (本地推理需要 NVIDIA GPU)
 - Docker & Docker Compose (推荐)
@@ -51,14 +52,14 @@
 git clone https://github.com/Bruce-Sakura/UploadMyself.git
 cd UploadMyself
 
-# 后端
-pip install -e ".[dev]"
+# 后端依赖
+cd backend && go mod tidy && cd ..
 
-# 前端
-cd frontend && npm install
+# 前端依赖
+cd frontend && npm install && cd ..
 
 # 下载模型
-bash ml/scripts/download_models.sh
+make models-download
 ```
 
 ### 启动
@@ -68,7 +69,7 @@ bash ml/scripts/download_models.sh
 docker-compose up -d redis postgres minio
 
 # 后端
-uvicorn backend.main:app --reload --port 8000
+cd backend && go run .
 
 # 前端
 cd frontend && npm run dev
@@ -82,17 +83,20 @@ cd frontend && npm run dev
 
 ```
 UploadMyself/
-├── backend/          # FastAPI 后端
-│   ├── api/          # API 路由
+├── backend/          # Golang 后端 (Gin)
+│   ├── api/          # 路由 & Handler
 │   ├── core/         # 核心引擎
 │   │   ├── skill_engine/    # 思维框架克隆
 │   │   ├── voice_engine/    # 语音克隆
 │   │   ├── avatar_engine/   # 虚拟形象
 │   │   └── distill_engine/  # 模型蒸馏
+│   ├── models/       # 数据模型
 │   ├── services/     # 服务层
-│   └── workers/      # Celery 异步任务
-├── ml/               # ML 模型与脚本
-├── frontend/         # React 前端
+│   │   └── provider/ # Provider (本地/云端)
+│   ├── workers/      # Asynq 异步任务
+│   └── config/       # 配置管理
+├── ml/               # ML 模型与脚本 (Python)
+├── frontend/         # React + Three.js 前端
 ├── skills/           # 生成的 Skill 存放
 ├── docs/             # 文档
 └── tests/            # 测试
