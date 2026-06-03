@@ -1,285 +1,225 @@
 #!/usr/bin/env python3
 """
-Photo → 2D Cartoon Character with Skeleton Animation
-Pipeline: Photo → Cartoon Style → Skeleton Detection → Animation Data
+UploadMyself Avatar Pipeline (CharacterGen)
+Photo → Remove BG → 4-View Generation → 3D Reconstruction → GLB/VRM
+
+Usage:
+  python generate_avatar.py --input photo.jpg --output-dir ./output --style cartoon
 """
 
 import argparse
 import json
 import os
 import sys
+import subprocess
+import shutil
+from pathlib import Path
 
-import cv2
-import numpy as np
+# CharacterGen paths
+CHARACTERGEN_DIR = os.path.join(os.path.dirname(__file__), "..", "charactergen")
+STAGE_2D_DIR = os.path.join(CHARACTERGEN_DIR, "2D_Stage")
+STAGE_3D_DIR = os.path.join(CHARACTERGEN_DIR, "3D_Stage")
 
 
-def photo_to_cartoon(input_path: str, output_path: str, style: str = "cartoon") -> str:
-    """Convert photo to cartoon style using OpenCV edge-preserving filter."""
-    img = cv2.imread(input_path)
-    if img is None:
-        raise ValueError(f"Cannot read image: {input_path}")
+def check_environment():
+    """Check if CharacterGen dependencies are available."""
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return False, "CUDA not available"
+        return True, f"GPU: {torch.cuda.get_device_name(0)}"
+    except ImportError:
+        return False, "PyTorch not installed"
 
-    # Resize for processing
-    h, w = img.shape[:2]
-    max_dim = 1024
-    if max(h, w) > max_dim:
-        scale = max_dim / max(h, w)
-        img = cv2.resize(img, (int(w * scale), int(h * scale)))
 
-    # Cartoon effect: bilateral filter + edge detection
-    # Step 1: Apply bilateral filter for smooth color regions
-    color = img.copy()
-    for _ in range(5):
-        color = cv2.bilateralFilter(color, 9, 75, 75)
+def remove_background(input_path: str, output_path: str) -> str:
+    """Remove background from input image using anime-seg."""
+    try:
+        from rm_anime_bg.cli import get_mask, SCALE
+        import onnxruntime as rt
+        from huggingface_hub import hf_hub_download
+        import cv2
+        import numpy as np
+        from PIL import Image
 
-    # Step 2: Convert to grayscale and detect edges
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.medianBlur(gray, 7)
-    edges = cv2.adaptiveThreshold(
-        gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 9, 2
+        # Load ONNX model
+        session_path = hf_hub_download(
+            repo_id="skytnt/anime-seg", filename="isnetis.onnx"
+        )
+        providers = ["CPUExecutionProvider"]
+        if "CUDAExecutionProvider" in rt.get_available_providers():
+            providers = ["CUDAExecutionProvider"]
+        session = rt.InferenceSession(session_path, providers=providers)
+
+        # Process image
+        img = cv2.imread(input_path)
+        if img is None:
+            raise ValueError(f"Cannot read image: {input_path}")
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        mask = get_mask(session, img)
+        mask[mask < 0.1] = 0.0
+        mask[mask > 0.9] = 1.0
+
+        img_rgba = np.concatenate([
+            (mask[..., None] * img).astype(np.uint8),
+            (mask * SCALE).astype(np.uint8)[..., None]
+        ], axis=2)
+
+        Image.fromarray(img_rgba).save(output_path)
+        return output_path
+    except Exception as e:
+        print(f"Background removal failed: {e}, using original", file=sys.stderr)
+        shutil.copy(input_path, output_path)
+        return output_path
+
+
+def generate_4views(input_path: str, output_dir: str, seed: int = 2333, timestep: int = 40) -> list:
+    """Generate 4-view images using CharacterGen 2D stage."""
+    sys.path.insert(0, STAGE_2D_DIR)
+    sys.path.insert(0, CHARACTERGEN_DIR)
+
+    from omegaconf import OmegaConf
+    from webui import Inference2D_API, rm_bg_api, process_image
+    from PIL import Image
+    import numpy as np
+
+    # Load config
+    config_path = os.path.join(STAGE_2D_DIR, "configs", "infer.yaml")
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"CharacterGen 2D config not found: {config_path}")
+
+    cfg = OmegaConf.load(config_path)
+
+    # Initialize 2D inference
+    print("[2D] Loading model...", file=sys.stderr)
+    infer2d = Inference2D_API(**cfg)
+    remove_api = rm_bg_api()
+
+    # Load and process input image
+    input_img = Image.open(input_path).convert("RGBA")
+
+    # Remove background
+    print("[2D] Removing background...", file=sys.stderr)
+    input_img = remove_api.remove_background(
+        imgs=[np.array(input_img)], alpha_min=0.1, alpha_max=0.9
+    )[0]
+
+    # Generate 4 views
+    print("[2D] Generating 4 views...", file=sys.stderr)
+    views = infer2d.inference(
+        input_img, 512, 768, crop=True, seed=seed, timestep=timestep
     )
 
-    # Step 3: Combine color and edges
-    edges_colored = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-    cartoon = cv2.bitwise_and(color, edges_colored)
+    # Remove background from generated views
+    print("[2D] Post-processing views...", file=sys.stderr)
+    views = remove_api.remove_background(imgs=views, alpha_min=0.2, alpha_max=0.9)
 
-    # Step 4: Style-specific adjustments
-    if style == "anime":
-        # More saturated colors for anime style
-        hsv = cv2.cvtColor(cartoon, cv2.COLOR_BGR2HSV).astype(np.float32)
-        hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.5, 0, 255)
-        hsv[:, :, 2] = np.clip(hsv[:, :, 2] * 1.1, 0, 255)
-        cartoon = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
-    elif style == "pixel":
-        # Pixel art: downscale then upscale
-        small = cv2.resize(cartoon, (w // 8, h // 8), interpolation=cv2.INTER_LINEAR)
-        cartoon = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+    # Save views
+    view_names = ["back", "front", "right", "left"]
+    view_paths = []
+    for i, (name, view) in enumerate(zip(view_names, views)):
+        path = os.path.join(output_dir, f"view_{name}.png")
+        view.save(path)
+        view_paths.append(path)
+        print(f"[2D] Saved {name} view: {path}", file=sys.stderr)
 
-    cv2.imwrite(output_path, cartoon)
-    return output_path
+    return view_paths
 
 
-def detect_skeleton(input_path: str, output_path: str) -> dict:
-    """
-    Detect body skeleton using OpenCV DNN with MobileNet/OpenPose.
-    Returns joint positions for 2D animation.
-    """
-    img = cv2.imread(input_path)
-    if img is None:
-        raise ValueError(f"Cannot read image: {input_path}")
+def reconstruct_3d(view_paths: list, output_dir: str, smooth_iter: int = 5) -> dict:
+    """Reconstruct 3D mesh from 4 views using CharacterGen 3D stage."""
+    sys.path.insert(0, STAGE_3D_DIR)
+    sys.path.insert(0, CHARACTERGEN_DIR)
 
-    h, w = img.shape[:2]
+    from omegaconf import OmegaConf
+    from webui import Inference3D_API
+    from PIL import Image
 
-    # Use OpenCV DNN for pose estimation if model available
-    # Fallback: use contour-based body part detection
-    skeleton = detect_skeleton_contour(img)
+    # Initialize 3D inference
+    print("[3D] Loading model...", file=sys.stderr)
+    infer3d = Inference3D_API()
 
-    # Draw skeleton on image
-    skeleton_img = draw_skeleton(img, skeleton)
+    # Load views
+    views = [Image.open(p).convert("RGBA") for p in view_paths]
 
-    cv2.imwrite(output_path, skeleton_img)
+    # Reconstruct
+    print("[3D] Reconstructing 3D mesh...", file=sys.stderr)
+    save_dir, obj_path, glb_path = infer3d.process_images(
+        views[0], views[1], views[2], views[3],
+        back_proj=True, smooth_iter=smooth_iter
+    )
+
+    # Copy output to our output_dir
+    final_glb = os.path.join(output_dir, "avatar.glb")
+    final_obj = os.path.join(output_dir, "avatar.obj")
+    shutil.copy2(glb_path, final_glb)
+    shutil.copy2(obj_path, final_obj)
 
     return {
-        "joints": skeleton["joints"],
-        "bones": skeleton["bones"],
-        "image_size": {"width": w, "height": h},
+        "glb_path": final_glb,
+        "obj_path": final_obj,
+        "save_dir": save_dir,
     }
-
-
-def detect_skeleton_contour(img: np.ndarray) -> dict:
-    """
-    Simplified skeleton detection using contour analysis.
-    For production: replace with OpenPose/MediaPipe/BlazePose.
-    """
-    h, w = img.shape[:2]
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Detect face region (approximate head position)
-    face_cascade = cv2.CascadeClassifier(
-        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    )
-    faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(30, 30))
-
-    # Estimate body proportions based on face position
-    if len(faces) > 0:
-        fx, fy, fw, fh = faces[0]
-        head_center = (fx + fw // 2, fy + fh // 2)
-        head_size = fw
-    else:
-        # Default: assume face is in upper-center
-        head_center = (w // 2, h // 4)
-        head_size = w // 6
-
-    # Generate skeleton joints based on body proportions
-    # (Head → Neck → Shoulders → Elbows → Wrists → Hips → Knees → Ankles)
-    cx, cy = head_center
-    neck_y = cy + head_size
-    shoulder_y = neck_y + head_size // 2
-    shoulder_span = head_size * 2
-    hip_y = int(shoulder_y + (h - shoulder_y) * 0.4)
-    knee_y = int(hip_y + (h - hip_y) * 0.5)
-    ankle_y = h - head_size // 2
-
-    joints = {
-        "head": {"x": int(cx), "y": int(cy), "confidence": 0.9},
-        "neck": {"x": int(cx), "y": int(neck_y), "confidence": 0.85},
-        "left_shoulder": {"x": int(cx - shoulder_span // 2), "y": int(shoulder_y), "confidence": 0.8},
-        "right_shoulder": {"x": int(cx + shoulder_span // 2), "y": int(shoulder_y), "confidence": 0.8},
-        "left_elbow": {"x": int(cx - shoulder_span), "y": int(shoulder_y + head_size), "confidence": 0.7},
-        "right_elbow": {"x": int(cx + shoulder_span), "y": int(shoulder_y + head_size), "confidence": 0.7},
-        "left_wrist": {"x": int(cx - shoulder_span - head_size // 2), "y": int(shoulder_y + head_size * 2), "confidence": 0.6},
-        "right_wrist": {"x": int(cx + shoulder_span + head_size // 2), "y": int(shoulder_y + head_size * 2), "confidence": 0.6},
-        "hip": {"x": int(cx), "y": int(hip_y), "confidence": 0.8},
-        "left_hip": {"x": int(cx - shoulder_span // 3), "y": int(hip_y), "confidence": 0.75},
-        "right_hip": {"x": int(cx + shoulder_span // 3), "y": int(hip_y), "confidence": 0.75},
-        "left_knee": {"x": int(cx - shoulder_span // 3), "y": int(knee_y), "confidence": 0.7},
-        "right_knee": {"x": int(cx + shoulder_span // 3), "y": int(knee_y), "confidence": 0.7},
-        "left_ankle": {"x": int(cx - shoulder_span // 3), "y": int(ankle_y), "confidence": 0.65},
-        "right_ankle": {"x": int(cx + shoulder_span // 3), "y": int(ankle_y), "confidence": 0.65},
-    }
-
-    bones = [
-        ("head", "neck"),
-        ("neck", "left_shoulder"),
-        ("neck", "right_shoulder"),
-        ("left_shoulder", "left_elbow"),
-        ("right_shoulder", "right_elbow"),
-        ("left_elbow", "left_wrist"),
-        ("right_elbow", "right_wrist"),
-        ("neck", "hip"),
-        ("hip", "left_hip"),
-        ("hip", "right_hip"),
-        ("left_hip", "left_knee"),
-        ("right_hip", "right_knee"),
-        ("left_knee", "left_ankle"),
-        ("right_knee", "right_ankle"),
-    ]
-
-    return {"joints": joints, "bones": bones}
-
-
-def draw_skeleton(img: np.ndarray, skeleton: dict) -> np.ndarray:
-    """Draw skeleton overlay on image."""
-    canvas = img.copy()
-    joints = skeleton["joints"]
-    bones = skeleton["bones"]
-
-    # Draw bones (lines)
-    for j1_name, j2_name in bones:
-        if j1_name in joints and j2_name in joints:
-            j1 = joints[j1_name]
-            j2 = joints[j2_name]
-            cv2.line(canvas, (j1["x"], j1["y"]), (j2["x"], j2["y"]), (0, 255, 0), 2)
-
-    # Draw joints (circles)
-    for name, j in joints.items():
-        color = (0, 0, 255) if "head" in name else (255, 0, 0)
-        cv2.circle(canvas, (j["x"], j["y"]), 5, color, -1)
-        cv2.putText(canvas, name[:3], (j["x"] + 5, j["y"] - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
-
-    return canvas
-
-
-def generate_animation_data(skeleton: dict, output_path: str) -> dict:
-    """
-    Generate animation keyframes for the skeleton.
-    Creates idle breathing + wave animation.
-    """
-    joints = skeleton["joints"]
-    h = skeleton["image_size"]["height"]
-
-    # Generate idle animation (breathing motion)
-    keyframes = []
-    num_frames = 30  # 1 second at 30fps
-
-    for frame in range(num_frames):
-        t = frame / num_frames
-        breath_offset = int(3 * (1 + __import__("math").sin(t * 2 * 3.14159)))
-
-        frame_joints = {}
-        for name, j in joints.items():
-            fj = {"x": j["x"], "y": j["y"]}
-            # Add breathing to upper body
-            if name in ["head", "neck", "left_shoulder", "right_shoulder"]:
-                fj["y"] = j["y"] - breath_offset
-            # Add subtle sway
-            if "left" in name:
-                fj["x"] = j["x"] - 1
-            elif "right" in name:
-                fj["x"] = j["x"] + 1
-            frame_joints[name] = {"x": int(fj["x"]), "y": int(fj["y"])}
-
-        keyframes.append({"frame": frame, "joints": frame_joints})
-
-    # Add wave animation for right hand
-    wave_keyframes = []
-    for frame in range(30):
-        t = frame / 30
-        wave_angle = 20 * __import__("math").sin(t * 4 * 3.14159)
-
-        frame_joints = {}
-        for name, j in joints.items():
-            fj = {"x": j["x"], "y": j["y"]}
-            if name == "right_wrist":
-                fj["y"] = j["y"] + int(wave_angle)
-                fj["x"] = j["x"] + int(wave_angle * 0.5)
-            frame_joints[name] = {"x": int(fj["x"]), "y": int(fj["y"])}
-
-        wave_keyframes.append({"frame": frame, "joints": frame_joints})
-
-    animation = {
-        "idle": keyframes,
-        "wave": wave_keyframes,
-        "fps": 30,
-        "skeleton": {
-            "joints": {k: {"x": v["x"], "y": v["y"]} for k, v in joints.items()},
-            "bones": skeleton["bones"],
-        },
-    }
-
-    with open(output_path, "w") as f:
-        json.dump(animation, f, indent=2)
-
-    return animation
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Photo → 2D Cartoon with Skeleton")
+    parser = argparse.ArgumentParser(description="UploadMyself Avatar Generation (CharacterGen)")
     parser.add_argument("--input", required=True, help="Input photo path")
     parser.add_argument("--output-dir", required=True, help="Output directory")
-    parser.add_argument("--style", default="cartoon", choices=["cartoon", "anime", "pixel"])
-    parser.add_argument("--name", default="avatar", help="Output name prefix")
+    parser.add_argument("--style", default="realistic", choices=["realistic", "cartoon", "anime"])
+    parser.add_argument("--seed", type=int, default=2333)
+    parser.add_argument("--timestep", type=int, default=40, help="Diffusion timesteps (10-70)")
+    parser.add_argument("--smooth", type=int, default=5, help="Mesh smoothing iterations")
+    parser.add_argument("--skip-views", action="store_true", help="Skip 4-view generation (use existing views)")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Step 1: Cartoon style
-    cartoon_path = os.path.join(args.output_dir, f"{args.name}_cartoon.png")
-    print(f"[1/3] Generating {args.style} style...", file=sys.stderr)
-    photo_to_cartoon(args.input, cartoon_path, args.style)
+    # Check environment
+    ok, msg = check_environment()
+    print(f"Environment: {msg}", file=sys.stderr)
+    if not ok:
+        # Fallback: output just the photo with a note
+        result = {
+            "error": msg,
+            "fallback": True,
+            "photo_path": args.input,
+        }
+        print(json.dumps(result))
+        sys.exit(1)
 
-    # Step 2: Skeleton detection
-    skeleton_path = os.path.join(args.output_dir, f"{args.name}_skeleton.png")
-    print("[2/3] Detecting skeleton...", file=sys.stderr)
-    skeleton_data = detect_skeleton(cartoon_path, skeleton_path)
+    # Step 1: Remove background
+    print("[1/3] Removing background...", file=sys.stderr)
+    clean_path = os.path.join(args.output_dir, "input_clean.png")
+    remove_background(args.input, clean_path)
 
-    # Step 3: Animation data
-    anim_path = os.path.join(args.output_dir, f"{args.name}_animation.json")
-    print("[3/3] Generating animation data...", file=sys.stderr)
-    anim_data = generate_animation_data(skeleton_data, anim_path)
+    # Step 2: Generate 4 views
+    if args.skip_views:
+        print("[2/3] Using existing views...", file=sys.stderr)
+        view_paths = sorted([
+            os.path.join(args.output_dir, f)
+            for f in os.listdir(args.output_dir)
+            if f.startswith("view_") and f.endswith(".png")
+        ])
+    else:
+        print("[2/3] Generating 4 views (this may take a few minutes)...", file=sys.stderr)
+        view_paths = generate_4views(clean_path, args.output_dir, args.seed, args.timestep)
+
+    # Step 3: 3D reconstruction
+    print("[3/3] Reconstructing 3D model...", file=sys.stderr)
+    result = reconstruct_3d(view_paths, args.output_dir, args.smooth)
 
     # Output result
-    result = {
-        "cartoon_image": cartoon_path,
-        "skeleton_image": skeleton_path,
-        "animation_data": anim_path,
-        "joints": skeleton_data["joints"],
-        "bones": skeleton_data["bones"],
-        "animations": list(anim_data.keys()),
+    output = {
+        "cartoon_image": clean_path,
+        "views": view_paths,
+        "glb_model": result["glb_path"],
+        "obj_model": result["obj_path"],
+        "has_skeleton": False,  # CharacterGen outputs mesh only, rigging is separate
+        "animations": [],
     }
-
-    print(json.dumps(result))
+    print(json.dumps(output))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import SkeletonCanvas from "../components/SkeletonCanvas";
+import ModelViewer from "../components/ModelViewer";
 import { useState } from 'react';
 import {
   Button,
@@ -131,21 +132,25 @@ export default function AvatarPage({ setPreview }: Props) {
         setResultUrl(cartoonUrl || '');
         setAnimData(animData);
 
+        // Check for GLB model
+        let glbUrl = '';
+        try {
+          const parsed = JSON.parse(a.result);
+          if (parsed.glb_model) {
+            glbUrl = parsed.glb_model.replace(/^(.\/)?uploads\//, '/uploads/');
+          }
+        } catch {}
+
         setPreview({
           visible: true,
           title: `🖼️ ${avatarName}`,
           content: (
             <div>
-              {animData ? (
+              {glbUrl ? (
                 <div>
-                  <SkeletonCanvas
-                    animationData={animData}
-                    cartoonImageUrl={cartoonUrl}
-                    width={400}
-                    height={500}
-                  />
+                  <ModelViewer modelUrl={glbUrl} width={400} height={500} />
                   <div style={{ marginTop: 12, color: '#888' }}>
-                    骨骼动画已生成 · 15个关节 · 14根骨骼 · 可做动作
+                    3D 模型已生成 · 可旋转/缩放 · 支持下载 GLB
                   </div>
                 </div>
               ) : cartoonUrl ? (

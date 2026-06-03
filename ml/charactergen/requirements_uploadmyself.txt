@@ -1,0 +1,19 @@
+# CharacterGen dependencies (GPU required)
+torch>=2.1
+torchvision>=0.16
+xformers>=0.0.23
+accelerate>=0.25
+transformers>=4.36
+diffusers==0.24.0
+einops>=0.7
+omegaconf>=2.3
+onnxruntime-gpu>=1.17
+rm_anime_bg
+pytorch_lightning>=2.1
+trimesh>=4.0
+pymeshlab>=2023.12
+pygltflib>=1.16
+open3d>=0.18
+lpips>=0.1
+ninja
+huggingface_hub>=0.20

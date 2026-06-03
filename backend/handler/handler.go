@@ -439,14 +439,13 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		// generate_avatar.py: photo → cartoon → skeleton → animation
+		// CharacterGen: photo → 4-view → 3D mesh → GLB
 		outputDir := fmt.Sprintf("%s/%s_output", UploadDir, avatarID)
 		script := fmt.Sprintf("%s/generate_avatar.py", MLScriptsDir)
 		cmd := exec.CommandContext(ctx, PythonBin, script,
 			"--input", a.PhotoPath,
 			"--output-dir", outputDir,
 			"--style", a.Style,
-			"--name", avatarID,
 		)
 
 		out, err := cmd.Output()

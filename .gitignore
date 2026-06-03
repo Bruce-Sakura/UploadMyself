@@ -62,3 +62,13 @@ htmlcov/
 
 # Docker
 docker-compose.override.yml
+
+# CharacterGen model weights (large files)
+ml/charactergen/2D_Stage/checkpoints/
+ml/charactergen/2D_Stage/pretrained_models/
+ml/charactergen/3D_Stage/checkpoints/
+ml/charactergen/3D_Stage/pretrained_models/
+ml/charactergen/outputs/
+*.bin
+*.safetensors
+*.ckpt
