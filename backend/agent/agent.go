@@ -77,6 +77,15 @@ func (a *Agent) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error
 }
 
 // loadSkillPrompt 从数据库加载 SKILL.md 内容作为 system prompt
+// LLMChat 简单的单轮 LLM 调用（用于 Skill 生成等）
+func (a *Agent) LLMChat(ctx context.Context, userPrompt string) (string, error) {
+	messages := []llmMessage{
+		{Role: "user", Content: userPrompt},
+	}
+	reply, _, err := a.llmClient.Chat(ctx, messages, nil)
+	return reply, err
+}
+
 func (a *Agent) loadSkillPrompt(skillID string) (string, error) {
 	if skillID == "" {
 		return "你是一个有帮助的AI助手。", nil

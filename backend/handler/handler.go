@@ -345,42 +345,34 @@ func (h *Handler) ProcessSkill(c *gin.Context) {
 	go func() {
 		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		// Write corpus to temp file
-		corpusPath := fmt.Sprintf("%s/%s_corpus.txt", UploadDir, skillID)
-		os.WriteFile(corpusPath, []byte(s.Corpus), 0644)
-		resultPath := fmt.Sprintf("%s/%s_analysis.json", UploadDir, skillID)
+		// 用 MiMo 生成 SKILL.md
+		prompt := fmt.Sprintf(`你是一个思维框架分析专家。分析以下用户的文本语料，生成一个完整的 SKILL.md 文件。
 
-		script := fmt.Sprintf("%s/analyze_corpus.py", MLScriptsDir)
-		cmd := exec.CommandContext(ctx, PythonBin, script,
-			"--input", corpusPath,
-			"--output", resultPath,
-		)
+用户名称: %s
 
-		out, err := cmd.Output()
-		if err != nil {
-			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("process error: %v", err))
+文本语料:
+%s
+
+请生成 SKILL.md，包含：
+1. 身份卡（用第一人称写50字自我介绍）
+2. 核心智模型（3-5个，含证据和应用）
+3. 决策启发式（3-5条）
+4. 表达DNA（句式/词汇/幽默风格）
+5. 诚实边界（局限性）
+
+用 Markdown 格式输出。`, s.Name, s.Corpus)
+
+		llmResp, llmErr := h.agent.LLMChat(ctx, prompt)
+		if llmErr != nil {
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("LLM error: %v", llmErr))
 			h.db.Model(&s).Updates(map[string]interface{}{"status": "failed"})
 			return
 		}
 
-		// Read result JSON
-		var result map[string]interface{}
-		if data, readErr := os.ReadFile(resultPath); readErr == nil {
-			json.Unmarshal(data, &result)
-		}
-		if len(out) > 0 {
-			json.Unmarshal(out, &result)
-		}
-		// For now, store the analysis as the skill result
-		if r, ok := result["analysis"]; ok {
-			h.db.Model(&s).Update("result", fmt.Sprintf("%v", r))
-		} else if len(out) > 0 {
-			h.db.Model(&s).Update("result", string(out))
-		}
-
+		h.db.Model(&s).Update("result", llmResp)
 		h.db.Model(&s).Updates(map[string]interface{}{"status": "done"})
 		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
 	}()
