@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Bruce-Sakura/UploadMyself/backend/model"
 	"github.com/Bruce-Sakura/UploadMyself/backend/handler"
 	"github.com/Bruce-Sakura/UploadMyself/backend/middleware"
+	"github.com/Bruce-Sakura/UploadMyself/backend/model"
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -20,9 +20,22 @@ func main() {
 	viper.AutomaticEnv()
 	viper.SetDefault("APP_PORT", 8000)
 	viper.SetDefault("DB_DSN", "host=localhost user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable")
+	viper.SetDefault("ML_SCRIPTS_DIR", "../ml/scripts")
+	viper.SetDefault("PYTHON_BIN", "python3")
 
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
+
+	// Configure handler-level globals for ML scripts
+	handler.MLScriptsDir = viper.GetString("ML_SCRIPTS_DIR")
+	handler.PythonBin = viper.GetString("PYTHON_BIN")
+
+	// Ensure uploads directory exists
+	uploadsDir := "./uploads"
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		log.Fatalf("create uploads dir: %v", err)
+	}
+	handler.UploadDir = uploadsDir
 
 	// Database
 	db, err := model.Connect(viper.GetString("DB_DSN"))
@@ -42,6 +55,10 @@ func main() {
 	h := handler.New(db)
 	v1 := r.Group("/api/v1")
 	{
+		// Upload & file serving
+		v1.POST("/upload", h.UploadFile)
+		v1.GET("/files/:id", h.ServeFile)
+
 		// Skills
 		skill := v1.Group("/skills")
 		{
@@ -50,6 +67,7 @@ func main() {
 			skill.GET("/:id", h.GetSkill)
 			skill.PUT("/:id", h.UpdateSkill)
 			skill.DELETE("/:id", h.DeleteSkill)
+			skill.POST("/:id/process", h.ProcessSkill)
 		}
 		// Voices
 		voice := v1.Group("/voices")
@@ -58,6 +76,8 @@ func main() {
 			voice.GET("", h.ListVoices)
 			voice.GET("/:id", h.GetVoice)
 			voice.DELETE("/:id", h.DeleteVoice)
+			voice.POST("/:id/train", h.TrainVoice)
+			voice.POST("/:id/synthesize", h.SynthesizeVoice)
 		}
 		// Avatars
 		avatar := v1.Group("/avatars")
@@ -66,10 +86,12 @@ func main() {
 			avatar.GET("", h.ListAvatars)
 			avatar.GET("/:id", h.GetAvatar)
 			avatar.DELETE("/:id", h.DeleteAvatar)
+			avatar.POST("/:id/process", h.ProcessAvatar)
 		}
 		// Tasks
 		task := v1.Group("/tasks")
 		{
+			task.GET("", h.ListTasks)
 			task.GET("/:id", h.GetTask)
 		}
 	}

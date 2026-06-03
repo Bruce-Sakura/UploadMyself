@@ -29,19 +29,19 @@
 
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
-| 1.1.1 | FFmpeg format conversion (any→WAV) | ⬜ | `os/exec` ffmpeg | 22050Hz mono WAV |
-| 1.1.2 | Noise reduction | ⬜ | Python `noisereduce` via subprocess | Go calls Python script |
-| 1.1.3 | VAD segmentation | ⬜ | **Silero-VAD v5** (2025) | ONNX runtime in Go, or Python subprocess |
+| 1.1.1 | FFmpeg format conversion (any→WAV) | ✅ | `os/exec` ffmpeg | 22050Hz mono WAV |
+| 1.1.2 | Noise reduction | ✅ | Python `noisereduce` via subprocess | Go calls Python script |
+| 1.1.3 | VAD segmentation | ✅ | Energy-based VAD in preprocess_audio.py | ONNX Silero-VAD 可后续升级 |
 | 1.1.4 | Speaker embedding extraction | ⬜ | **Resemblyzer** / **pyannote-audio 3.x** | Extract d-vector / speaker embedding |
-| 1.1.5 | Audio quality validation | ⬜ | SNR check + clipping detection | Reject low-quality samples |
+| 1.1.5 | Audio quality validation | ✅ | SNR check + clipping detection | 在 preprocess_audio.py 中 |
 
 ### 1.2 Voice Cloning — Local Model
 
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
-| 1.2.1 | **GPT-SoVITS v2** integration | ⬜ | [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) | 1-min few-shot, best CN quality |
-| 1.2.2 | GPT-SoVITS training worker | ⬜ | Asynq task → Python subprocess | Fine-tune with user audio |
-| 1.2.3 | GPT-SoVITS inference worker | ⬜ | API or subprocess | Text → cloned voice audio |
+| 1.2.1 | **GPT-SoVITS v2** integration | 🔵 | [RVC-Boss/GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) | 脚本框架已建，待接入真实模型 |
+| 1.2.2 | GPT-SoVITS training worker | ✅ | Go os/exec → voice_clone_train.py | Fine-tune with user audio |
+| 1.2.3 | GPT-SoVITS inference worker | ✅ | Go os/exec → voice_synthesize.py | Text → cloned voice audio |
 | 1.2.4 | **CosyVoice2-0.5B** integration | ⬜ | [FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice) | Streaming TTS, 30-50% fewer errors than v1 |
 | 1.2.5 | **Fish Speech v1.5** integration | ⬜ | [fishaudio/fish-speech](https://github.com/fishaudio/fish-speech) | DualAR, 500M params, 80+ languages, zero-shot |
 | 1.2.6 | Model hot-swap (switch at runtime) | ⬜ | ModelRegistry + Provider pattern | User picks which engine to use |
@@ -59,10 +59,10 @@
 
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
-| 1.4.1 | POST /api/v1/voice/upload | ⬜ | Gin + MinIO | Store audio, trigger preprocess |
-| 1.4.2 | POST /api/v1/voice/train | ⬜ | Asynq async task | Returns task_id |
-| 1.4.3 | POST /api/v1/voice/synthesize | ⬜ | Sync or async | Text → audio file |
-| 1.4.4 | GET /api/v1/voice/:id/samples | ⬜ | | Preview samples |
+| 1.4.1 | POST /api/v1/voices (upload) | ✅ | Gin + local storage | Store audio |
+| 1.4.2 | POST /api/v1/voices/:id/train | ✅ | Go os/exec → Python | Returns task_id |
+| 1.4.3 | POST /api/v1/voices/:id/synthesize | ✅ | Go os/exec → Python | Text → audio file |
+| 1.4.4 | GET /api/v1/voices/:id | ✅ | GORM | Voice detail + status |
 | 1.4.5 | WebSocket streaming TTS | ⬜ | `gorilla/websocket` | Real-time audio stream |
 
 ---
@@ -73,8 +73,8 @@
 
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
-| 2.1.1 | Face detection + alignment | ⬜ | **InsightFace** (ONNX in Go) or Python subprocess | Detect, crop, align |
-| 2.1.2 | Face quality scoring | ⬜ | Blur/lighting/occlusion check | Reject bad photos |
+| 2.1.1 | Face detection + alignment | ✅ | OpenCV Haar cascade in detect_face.py | Detect, crop, align |
+| 2.1.2 | Face quality scoring | ✅ | Laplacian variance blur metric | 在 detect_face.py 中 |
 | 2.1.3 | Background removal | ⬜ | **RMBG-2.0** / `rembg` | Transparent PNG output |
 | 2.1.4 | Style transfer (optional) | ⬜ | Realistic → Cartoon/Anime | SD img2img or dedicated model |
 
@@ -152,8 +152,8 @@
 
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
-| 4.1 | Corpus collector (text cleaning) | ⬜ | Go stdlib | UTF-8, dedup, chunk |
-| 4.2 | LLM analysis (mind model extraction) | ⬜ | **Qwen2.5-72B** / **DeepSeek-V3** / **GPT-4o** | 3-7 mental models |
+| 4.1 | Corpus collector (text cleaning) | ✅ | analyze_corpus.py | UTF-8, chunk, keyword extraction |
+| 4.2 | LLM analysis (mind model extraction) | 🔵 | **Qwen2.5-72B** / **DeepSeek-V3** / **GPT-4o** | Go handler 调用框架已建 |
 | 4.3 | Decision heuristics extraction | ⬜ | LLM | 5-10 rules |
 | 4.4 | Expression DNA analysis | ⬜ | LLM | Style/syntax/humor |
 | 4.5 | SKILL.md synthesizer | ⬜ | Template + LLM | Nuwa format output |
@@ -180,11 +180,11 @@
 
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
-| 6.1 | Home page / onboarding | ⬜ | React + Ant Design | Upload flow |
-| 6.2 | Skill clone page | ⬜ | | Text upload → SKILL.md preview |
-| 6.3 | Voice clone page | ⬜ | | Audio upload → train → preview |
-| 6.4 | 2D avatar page | ⬜ | | Photo → animated video player |
-| 6.5 | 3D avatar page | ⬜ | React Three Fiber | Interactive 3D viewer |
+| 6.1 | Home page / onboarding | ✅ | React + Ant Design | 功能列表 + 导航 |
+| 6.2 | Skill clone page | ✅ | | Text upload → SKILL.md preview |
+| 6.3 | Voice clone page | ✅ | | Audio upload → train → preview |
+| 6.4 | 2D avatar page | ✅ | | Photo → animated video player |
+| 6.5 | 3D avatar page | ✅ | React Three Fiber | Interactive 3D viewer |
 | 6.6 | Playground (combined) | ⬜ | | Chat + voice + 3D avatar |
 | 6.7 | Settings (provider/model) | ⬜ | | Switch local/cloud per module |
 | 6.8 | Task queue dashboard | ⬜ | | Real-time progress |
@@ -196,8 +196,8 @@
 | # | Task | Status | Tech | Notes |
 |---|------|--------|------|-------|
 | 7.1 | User auth (JWT) | ⬜ | Go JWT middleware | Optional for local use |
-| 7.2 | PostgreSQL models + migrations | ⬜ | GORM AutoMigrate + Atlas | User/Skill/Voice/Avatar |
-| 7.3 | MinIO file storage integration | ⬜ | minio-go | Upload/download |
+| 7.2 | PostgreSQL models + migrations | ✅ | GORM AutoMigrate | User/Skill/Voice/Avatar/Task/FileUpload |
+| 7.3 | File upload integration | ✅ | Gin multipart + local FS | POST /api/v1/upload |
 | 7.4 | WebSocket real-time updates | ⬜ | gorilla/websocket | Task progress push |
 | 7.5 | Docker production compose | ⬜ | Multi-stage build | Go binary + Node + Python ML |
 | 7.6 | CI/CD (GitHub Actions) | ⬜ | | Lint + test + build + push |

@@ -1,12 +1,23 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"os/exec"
+	"time"
 
 	"github.com/Bruce-Sakura/UploadMyself/backend/model"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+// MLScriptsDir and PythonBin are configured from main via env vars.
+var (
+	MLScriptsDir = "../ml/scripts"
+	PythonBin    = "python3"
 )
 
 type Handler struct {
@@ -201,4 +212,215 @@ func (h *Handler) GetTask(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, t)
+}
+
+// ==================== Voice Processing ====================
+
+// TrainVoice triggers voice_clone_train.py for the given voice ID.
+func (h *Handler) TrainVoice(c *gin.Context) {
+	voiceID := c.Param("id")
+	var v model.Voice
+	if err := h.db.First(&v, "id = ?", voiceID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "voice not found"})
+		return
+	}
+
+	// Create task
+	task, err := CreateTask(h.db, "voice_train", voiceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
+		return
+	}
+
+	// Update voice status
+	h.db.Model(&v).Update("status", "training")
+
+	// Run async
+	go func() {
+		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		script := fmt.Sprintf("%s/voice_clone_train.py", MLScriptsDir)
+		cmd := exec.CommandContext(ctx, PythonBin, script,
+			"--voice-id", voiceID,
+			"--audio-path", v.AudioPath,
+			"--name", v.Name,
+		)
+
+		out, err := cmd.Output()
+		if err != nil {
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("train error: %v", err))
+			h.db.Model(&v).Update("status", "failed")
+			return
+		}
+
+		// Parse JSON stdout
+		var result map[string]interface{}
+		if json.Unmarshal(out, &result) == nil {
+			if mp, ok := result["model_path"]; ok {
+				h.db.Model(&v).Update("model_path", fmt.Sprintf("%v", mp))
+			}
+		}
+
+		h.db.Model(&v).Update("status", "done")
+		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"task_id": task.ID, "status": "training"})
+}
+
+// SynthesizeVoice calls voice_synthesize.py and returns audio.
+func (h *Handler) SynthesizeVoice(c *gin.Context) {
+	voiceID := c.Param("id")
+	var v model.Voice
+	if err := h.db.First(&v, "id = ?", voiceID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "voice not found"})
+		return
+	}
+
+	var body struct {
+		Text string `json:"text" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	script := fmt.Sprintf("%s/voice_synthesize.py", MLScriptsDir)
+	cmd := exec.CommandContext(ctx, PythonBin, script,
+		"--voice-id", voiceID,
+		"--model-path", v.ModelPath,
+		"--ref-audio", v.RefAudioPath,
+		"--text", body.Text,
+	)
+
+	out, err := cmd.Output()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("synthesize error: %v", err)})
+		return
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(out, &result); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid script output"})
+		return
+	}
+
+	audioPath, _ := result["audio_path"]
+	c.JSON(http.StatusOK, gin.H{"audio_path": audioPath, "result": result})
+}
+
+// ==================== Skill Processing ====================
+
+// ProcessSkill triggers analyze_corpus.py for the given skill.
+func (h *Handler) ProcessSkill(c *gin.Context) {
+	skillID := c.Param("id")
+	var s model.Skill
+	if err := h.db.First(&s, "id = ?", skillID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
+		return
+	}
+
+	task, err := CreateTask(h.db, "skill_process", skillID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
+		return
+	}
+
+	h.db.Model(&s).Update("status", "processing")
+
+	go func() {
+		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		script := fmt.Sprintf("%s/analyze_corpus.py", MLScriptsDir)
+		cmd := exec.CommandContext(ctx, PythonBin, script,
+			"--skill-id", skillID,
+			"--corpus", s.Corpus,
+			"--name", s.Name,
+		)
+
+		out, err := cmd.Output()
+		if err != nil {
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("process error: %v", err))
+			h.db.Model(&s).Updates(map[string]interface{}{"status": "failed"})
+			return
+		}
+
+		var result map[string]interface{}
+		if json.Unmarshal(out, &result) == nil {
+			if sk, ok := result["skill_md"]; ok {
+				h.db.Model(&s).Update("result", fmt.Sprintf("%v", sk))
+			}
+		}
+
+		h.db.Model(&s).Updates(map[string]interface{}{"status": "done"})
+		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"task_id": task.ID, "status": "processing"})
+}
+
+// ==================== Avatar Processing ====================
+
+// ProcessAvatar triggers detect_face.py for the given avatar.
+func (h *Handler) ProcessAvatar(c *gin.Context) {
+	avatarID := c.Param("id")
+	a := model.Avatar{}
+	if err := h.db.First(&a, "id = ?", avatarID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		return
+	}
+
+	task, err := CreateTask(h.db, "avatar_process", avatarID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
+		return
+	}
+
+	h.db.Model(&a).Update("status", "processing")
+
+	go func() {
+		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		script := fmt.Sprintf("%s/detect_face.py", MLScriptsDir)
+		cmd := exec.CommandContext(ctx, PythonBin, script,
+			"--avatar-id", avatarID,
+			"--photo-path", a.PhotoPath,
+			"--type", a.Type,
+			"--style", a.Style,
+		)
+
+		out, err := cmd.Output()
+		if err != nil {
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("process error: %v", err))
+			h.db.Model(&a).Update("status", "failed")
+			return
+		}
+
+		var result map[string]interface{}
+		if json.Unmarshal(out, &result) == nil {
+			if op, ok := result["output_path"]; ok {
+				h.db.Model(&a).Update("output_path", fmt.Sprintf("%v", op))
+			}
+			if r, ok := result["result"]; ok {
+				h.db.Model(&a).Update("result", fmt.Sprintf("%v", r))
+			}
+		}
+
+		h.db.Model(&a).Update("status", "done")
+		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"task_id": task.ID, "status": "processing"})
 }
