@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # ===== Database =====
   postgres:
     image: postgres:16-alpine
     environment:
@@ -22,6 +23,36 @@ services:
       - "6379:6379"
     volumes:
       - redisdata:/data
+
+  # ===== Backend (Go + Python ML) =====
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_PORT: "8000"
+      PYTHON_BIN: "python3"
+      ML_SCRIPTS_DIR: "/app/ml/scripts"
+      DB_DSN: "host=postgres user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    restart: unless-stopped
+
+  # ===== Frontend (React + Nginx) =====
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
   pgdata:

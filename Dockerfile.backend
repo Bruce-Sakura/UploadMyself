@@ -1,0 +1,16 @@
+FROM golang:1.22-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum* ./
+RUN go mod download || true
+COPY . .
+RUN CGO_ENABLED=0 go build -o /uploadmyself .
+
+FROM python:3.11-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /uploadmyself .
+COPY ml/scripts /app/ml/scripts
+RUN pip install --no-cache-dir -r /app/ml/scripts/requirements.txt 2>/dev/null || true
+RUN mkdir -p /app/uploads
+EXPOSE 8000
+CMD ["./uploadmyself"]
