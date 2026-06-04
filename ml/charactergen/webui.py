@@ -40,7 +40,10 @@ import cv2
 import lrm
 import trimesh
 from lrm.utils.config import load_config
-from refine import refine
+try:
+    from refine import refine
+except ImportError:
+    refine = None
 from datetime import datetime
 import gradio as gr
 from pygltflib import GLTF2

@@ -12,7 +12,10 @@ from pygltflib import GLTF2
 from PIL import Image
 from huggingface_hub import hf_hub_download
 
-from refine import refine
+try:
+    from refine import refine
+except ImportError:
+    refine = None
 
 device = "cuda"
 
@@ -118,45 +121,33 @@ class Inference_API:
 
         return save_dir, f"{save_dir}/output.obj", f"{save_dir}/output.glb"
 
-inferapi = Inference_API()
+if __name__ == "__main__":
+    inferapi = Inference_API()
 
-# Define the interface
-with gr.Blocks() as demo:
-    gr.Markdown("# [SIGGRAPH'24] CharacterGen: Efficient 3D Character Generation from Single Images with Multi-View Pose Calibration")
-    gr.Markdown("# 3D Stage: Four View Images to 3D Mesh")
-    with gr.Row(variant="panel"):
-        with gr.Column():
-            with gr.Row():
-                img_input0 = gr.Image(type="pil", label="Back Image", image_mode="RGBA", width=256, height=384)
-                img_input1 = gr.Image(type="pil", label="Front Image", image_mode="RGBA", width=256, height=384)
-            with gr.Row():
-                img_input2 = gr.Image(type="pil", label="Right Image", image_mode="RGBA", width=256, height=384)
-                img_input3 = gr.Image(type="pil", label="Left Image", image_mode="RGBA", width=256, height=384)
-            with gr.Row():
-                gr.Examples(
-                    examples=
-                    [["material/examples/1/1.png",
-                    "material/examples/1/2.png",
-                    "material/examples/1/3.png",
-                    "material/examples/1/4.png"]],
-                    label="Example Images",
-                    inputs=[img_input0, img_input1, img_input2, img_input3]
-                )
-        with gr.Column():
-            with gr.Row():
-                back_proj = gr.Checkbox(label="Back Projection")
-                submit_button = gr.Button("Process")
-            output_dir = gr.Textbox(label="Output Directory")
+    with gr.Blocks() as demo:
+        gr.Markdown("# [SIGGRAPH'24] CharacterGen: 3D Stage")
+        with gr.Row(variant="panel"):
             with gr.Column():
+                with gr.Row():
+                    img_input0 = gr.Image(type="pil", label="Back Image", image_mode="RGBA", width=256, height=384)
+                    img_input1 = gr.Image(type="pil", label="Front Image", image_mode="RGBA", width=256, height=384)
+                with gr.Row():
+                    img_input2 = gr.Image(type="pil", label="Right Image", image_mode="RGBA", width=256, height=384)
+                    img_input3 = gr.Image(type="pil", label="Left Image", image_mode="RGBA", width=256, height=384)
+            with gr.Column():
+                with gr.Row():
+                    back_proj = gr.Checkbox(label="Back Projection")
+                    submit_button = gr.Button("Process")
+                output_dir = gr.Textbox(label="Output Directory")
                 with gr.Tab("GLB"):
-                    output_model_glb = gr.Model3D( label="Output Model (GLB Format)", height = 768)
-                    gr.Markdown("Note: The model shown here has a darker appearance. Download to get correct results.")
+                    output_model_glb = gr.Model3D(label="Output Model (GLB Format)", height=512)
                 with gr.Tab("OBJ"):
-                    output_model_obj = gr.Model3D( label="Output Model (OBJ Format)", height = 768)
-                    gr.Markdown("Note: The model shown here is flipped. Download to get correct results.")
+                    output_model_obj = gr.Model3D(label="Output Model (OBJ Format)", height=512)
 
-    submit_button.click(inferapi.process_images, inputs=[img_input0, img_input1, img_input2, img_input3, back_proj],
-                        outputs=[output_dir, output_model_obj, output_model_glb])
+        submit_button.click(
+            inferapi.process_images,
+            inputs=[img_input0, img_input1, img_input2, img_input3, back_proj],
+            outputs=[output_dir, output_model_obj, output_model_glb],
+        )
 
-# Run the interface
-demo.launch()
+    demo.launch(server_name="0.0.0.0")
