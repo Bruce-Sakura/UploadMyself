@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Bruce-Sakura/UploadMyself/backend/model"
 	"github.com/gin-gonic/gin"
@@ -14,28 +15,66 @@ import (
 // UploadDir is the directory for stored uploads (set from main).
 var UploadDir = "./uploads"
 
+// MaxUploadSize is the max file size in bytes (100MB).
+const MaxUploadSize = 100 << 20
+
+// AllowedMIMETypes is the set of allowed MIME types for upload.
+var AllowedMIMETypes = map[string]bool{
+	"audio/wav":            true,
+	"audio/x-wav":          true,
+	"audio/mpeg":           true,
+	"audio/mp3":            true,
+	"audio/flac":           true,
+	"audio/ogg":            true,
+	"audio/webm":           true,
+	"image/png":            true,
+	"image/jpeg":           true,
+	"image/webp":           true,
+	"image/gif":            true,
+	"application/pdf":      true,
+	"text/plain":           true,
+	"application/json":     true,
+}
+
 // UploadFile handles multipart file upload, saves with UUID filename.
 func (h *Handler) UploadFile(c *gin.Context) {
+	// Limit request body size
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxUploadSize)
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
 		return
 	}
 
-	// Generate UUID filename preserving extension
-	ext := filepath.Ext(file.Filename)
+	// Validate MIME type
+	mimeType := file.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	if !AllowedMIMETypes[mimeType] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("file type not allowed: %s", mimeType)})
+		return
+	}
+
+	// Validate file extension
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	allowedExts := map[string]bool{
+		".wav": true, ".mp3": true, ".flac": true, ".ogg": true, ".webm": true,
+		".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".gif": true,
+		".pdf": true, ".txt": true, ".json": true,
+	}
+	if ext != "" && !allowedExts[ext] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("file extension not allowed: %s", ext)})
+		return
+	}
+
 	newName := uuid.New().String() + ext
 	savePath := filepath.Join(UploadDir, newName)
 
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
 		return
-	}
-
-	// Detect mime type
-	mimeType := file.Header.Get("Content-Type")
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
 	}
 
 	fu := model.FileUpload{

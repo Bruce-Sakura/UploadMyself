@@ -16,8 +16,8 @@ import {
   InboxOutlined,
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
-import { uploadFile, createVoice, trainVoice, synthesizeVoice, getTask, getVoice } from '../api/endpoints';
-import type { Task } from '../api/types';
+import { uploadFile, createVoice, trainVoice, synthesizeVoice, getVoice } from '../api/endpoints';
+import { pollTask } from '../hooks/useTaskPoller';
 import type { PreviewState } from '../App';
 
 const { Title, Paragraph, Text } = Typography;
@@ -42,26 +42,14 @@ export default function VoiceClone({ setPreview }: Props) {
   const [audioUrl, setAudioUrl] = useState('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const pollTask = async (taskId: string): Promise<boolean> => {
-    let attempts = 0;
-    while (attempts < 60) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const { data: task } = await getTask(taskId) as { data: Task };
-        setProgress(task.progress ?? 0);
-        if (task.status === 'done' || task.status === 'completed') {
-          return true;
-        }
-        if (task.status === 'failed') {
-          message.error(`训练失败: ${task.error || '未知错误'}`);
-          return false;
-        }
-      } catch {
-        // continue
-      }
-      attempts++;
-    }
-    return false;
+  const handlePoll = async (taskId: string): Promise<boolean> => {
+    let success = false;
+    await pollTask(taskId, {
+      onProgress: (task) => setProgress(task.progress ?? 0),
+      onDone: () => { success = true; },
+      onFailed: (task) => { message.error(`训练失败: ${task.error || '未知错误'}`); },
+    });
+    return success;
   };
 
   const handleTrain = async () => {
@@ -94,7 +82,7 @@ export default function VoiceClone({ setPreview }: Props) {
       // 3. Train
       setVoiceStatus('training');
       const { data: task } = await trainVoice(voice.id);
-      const ok = await pollTask(task.id);
+      const ok = await handlePoll(task.id);
 
       if (ok) {
         const { data: v } = await getVoice(voice.id);

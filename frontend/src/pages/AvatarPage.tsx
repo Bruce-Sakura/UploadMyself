@@ -1,4 +1,3 @@
-import SkeletonCanvas from "../components/SkeletonCanvas";
 import ModelViewer from "../components/ModelViewer";
 import { useState } from 'react';
 import {
@@ -26,9 +25,8 @@ import {
   createAvatar,
   processAvatar,
   getAvatar,
-  getTask,
 } from '../api/endpoints';
-import type { Task } from '../api/types';
+import { pollTask } from '../hooks/useTaskPoller';
 import type { PreviewState } from '../App';
 
 const { Title, Paragraph, Text } = Typography;
@@ -54,24 +52,14 @@ export default function AvatarPage({ setPreview }: Props) {
   const [status, setStatus] = useState('');
   const [_avatarId, setAvatarId] = useState('');
 
-  const pollTask = async (taskId: string): Promise<boolean> => {
-    let attempts = 0;
-    while (attempts < 60) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const { data: task } = await getTask(taskId) as { data: Task };
-        if (task.status === 'done' || task.status === 'completed') return true;
-        if (task.status === 'failed') {
-          message.error(`生成失败: ${task.error || '未知错误'}`);
-          return false;
-        }
-        setStatus(task.status);
-      } catch {
-        // continue
-      }
-      attempts++;
-    }
-    return false;
+  const handlePoll = async (taskId: string): Promise<boolean> => {
+    let success = false;
+    await pollTask(taskId, {
+      onProgress: (task) => setStatus(task.status),
+      onDone: () => { success = true; },
+      onFailed: (task) => { message.error(`生成失败: ${task.error || '未知错误'}`); },
+    });
+    return success;
   };
 
   const handleGenerate = async () => {
@@ -103,7 +91,7 @@ export default function AvatarPage({ setPreview }: Props) {
 
       setStatus('processing');
       const { data: task } = await processAvatar(avatar.id);
-      const ok = await pollTask(task.id);
+      const ok = await handlePoll(task.id);
 
       if (ok) {
         const { data: a } = await getAvatar(avatar.id);

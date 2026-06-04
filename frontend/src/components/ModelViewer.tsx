@@ -1,8 +1,8 @@
 import { Suspense, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, useGLTF, Environment, ContactShadows } from '@react-three/drei';
-import { Spin, Typography, Button, Space } from 'antd';
-import { DownloadOutlined, RotateLeftOutlined } from '@ant-design/icons';
+import { Spin, Typography, Button } from 'antd';
+import { DownloadOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 

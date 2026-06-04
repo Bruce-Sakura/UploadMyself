@@ -20,9 +20,8 @@ import {
   createSkill,
   processSkill,
   getSkill,
-  getTask,
 } from '../api/endpoints';
-import type { Task } from '../api/types';
+import { pollTask } from '../hooks/useTaskPoller';
 import type { PreviewState } from '../App';
 
 const { TextArea } = Input;
@@ -49,41 +48,10 @@ export default function SkillClone({ setPreview }: Props) {
     setPreview({ visible: true, title, content });
   };
 
-  const pollTask = async (taskId: string) => {
-    let attempts = 0;
-    const maxAttempts = 60;
-    while (attempts < maxAttempts) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const { data: task } = await getTask(taskId) as { data: Task };
-        if (task.status === 'done' || task.status === 'completed') {
-          const { data: skill } = await getSkill(task.ref_id);
-          setStatus('done');
-          // 在右侧预览区显示结果
-          showInPreview('🧠 生成的思维框架', (
-            <pre style={{
-              background: '#f6f8fa',
-              padding: 16,
-              borderRadius: 8,
-              overflow: 'auto',
-              maxHeight: 'calc(100vh - 240px)',
-              fontSize: 13,
-              lineHeight: 1.6,
-              whiteSpace: 'pre-wrap',
-            }}>
-              {skill.result}
-            </pre>
-          ));
-          message.success('思维框架生成成功！');
-          return;
-        }
-        if (task.status === 'failed') {
-          setStatus('failed');
-          message.error(`处理失败: ${task.error || '未知错误'}`);
-          return;
-        }
+  const handlePoll = async (taskId: string) => {
+    await pollTask(taskId, {
+      onProgress: (task) => {
         setStatus(task.status);
-        // 处理中也更新预览
         showInPreview('⏳ 处理中...', (
           <div style={{ textAlign: 'center', padding: 40 }}>
             <Spin size="large" />
@@ -92,11 +60,31 @@ export default function SkillClone({ setPreview }: Props) {
             </div>
           </div>
         ));
-      } catch {
-        // continue polling
-      }
-      attempts++;
-    }
+      },
+      onDone: async (task) => {
+        const { data: skill } = await getSkill(task.ref_id);
+        setStatus('done');
+        showInPreview('🧠 生成的思维框架', (
+          <pre style={{
+            background: '#f6f8fa',
+            padding: 16,
+            borderRadius: 8,
+            overflow: 'auto',
+            maxHeight: 'calc(100vh - 240px)',
+            fontSize: 13,
+            lineHeight: 1.6,
+            whiteSpace: 'pre-wrap',
+          }}>
+            {skill.result}
+          </pre>
+        ));
+        message.success('思维框架生成成功！');
+      },
+      onFailed: (task) => {
+        setStatus('failed');
+        message.error(`处理失败: ${task.error || '未知错误'}`);
+      },
+    });
   };
 
   const onFinish = async (values: { name: string; corpus: string }) => {
@@ -114,7 +102,7 @@ export default function SkillClone({ setPreview }: Props) {
       ));
 
       const { data: task } = await processSkill(skill.id);
-      await pollTask(task.id);
+      await handlePoll(task.id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '操作失败';
       message.error(msg);

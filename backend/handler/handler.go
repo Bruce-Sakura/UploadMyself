@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -276,8 +277,9 @@ func (h *Handler) TrainVoice(c *gin.Context) {
 	go func() {
 		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
+  ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+  defer cancel()
+		
 
 		// Write config JSON for voice_clone_train.py
 		configPath := fmt.Sprintf("%s/%s_train_config.json", UploadDir, voiceID)
@@ -289,9 +291,9 @@ func (h *Handler) TrainVoice(c *gin.Context) {
 			"--config", configPath,
 		)
 
-		out, err := cmd.Output()
+		out, err := cmd.CombinedOutput()
 		if err != nil {
-			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("train error: %v", err))
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("train error: %v\noutput: %s", err, string(out)))
 			h.db.Model(&v).Update("status", "failed")
 			return
 		}
@@ -328,8 +330,9 @@ func (h *Handler) SynthesizeVoice(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+ ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+ defer cancel()
+	
 
 	outputPath := fmt.Sprintf("%s/%s_synth.wav", UploadDir, voiceID)
 
@@ -341,9 +344,9 @@ func (h *Handler) SynthesizeVoice(c *gin.Context) {
 		"--model-dir", UploadDir,
 	)
 
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("synthesize error: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("synthesize error: %v\noutput: %s", err, string(out))})
 		return
 	}
 
@@ -379,8 +382,9 @@ func (h *Handler) ProcessSkill(c *gin.Context) {
 	go func() {
 		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
+  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+  defer cancel()
+		
 
 		// 用 MiMo 生成 SKILL.md
 		prompt := fmt.Sprintf(`你是一个思维框架分析专家。分析以下用户的文本语料，生成一个完整的 SKILL.md 文件。
@@ -436,29 +440,42 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 	go func() {
 		UpdateTaskStatus(h.db, task.ID, "running", 10, "")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
+		
 
 		// CharacterGen: photo → 4-view → 3D mesh → GLB
 		outputDir := fmt.Sprintf("%s/%s_output", UploadDir, avatarID)
-		script := fmt.Sprintf("%s/generate_avatar.py", MLScriptsDir)
-		cmd := exec.CommandContext(ctx, PythonBin, script,
-			"--input", a.PhotoPath,
-			"--output-dir", outputDir,
-			"--style", a.Style,
-		)
+		mlServiceURL := os.Getenv("ML_SERVICE_URL")
+		if mlServiceURL == "" {
+			mlServiceURL = "http://host.docker.internal:8001"
+		}
 
-		out, err := cmd.Output()
+		// 调用 ML 服务
+		reqBody, _ := json.Marshal(map[string]interface{}{
+			"input_path": a.PhotoPath,
+			"output_dir": outputDir,
+			"seed":       2333,
+			"timestep":   40,
+		})
+		resp, err := http.Post(mlServiceURL+"/generate-avatar", "application/json", strings.NewReader(string(reqBody)))
 		if err != nil {
-			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("process error: %v", err))
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("ML service error: %v", err))
 			h.db.Model(&a).Update("status", "failed")
 			return
 		}
+		defer resp.Body.Close()
 
-		// Parse JSON from stdout
+		respBody, _ := io.ReadAll(resp.Body)
 		var result map[string]interface{}
-		if len(out) > 0 {
-			json.Unmarshal(out, &result)
+		json.Unmarshal(respBody, &result)
+
+		if resp.StatusCode != 200 {
+			errMsg := "unknown error"
+			if e, ok := result["error"]; ok {
+				errMsg = fmt.Sprintf("%v", e)
+			}
+			UpdateTaskStatus(h.db, task.ID, "failed", 0, fmt.Sprintf("ML error: %s", errMsg))
+			h.db.Model(&a).Update("status", "failed")
+			return
 		}
 
 		// Convert paths to relative URLs

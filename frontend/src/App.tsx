@@ -13,6 +13,7 @@ import VoiceClone from './pages/VoiceClone';
 import AvatarPage from './pages/AvatarPage';
 import Dashboard from './pages/Dashboard';
 import AgentChat from './pages/AgentChat';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useState } from 'react';
 
 const { Header, Content, Sider } = Layout;
@@ -95,14 +96,16 @@ function App() {
               background: '#fff',
             }}
           >
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/chat" element={<AgentChat />} />
-              <Route path="/skill" element={<SkillClone setPreview={setPreview} />} />
-              <Route path="/voice" element={<VoiceClone setPreview={setPreview} />} />
-              <Route path="/avatar" element={<AvatarPage setPreview={setPreview} />} />
-            </Routes>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/chat" element={<AgentChat />} />
+                <Route path="/skill" element={<SkillClone setPreview={setPreview} />} />
+                <Route path="/voice" element={<VoiceClone setPreview={setPreview} />} />
+                <Route path="/avatar" element={<AvatarPage setPreview={setPreview} />} />
+              </Routes>
+            </ErrorBoundary>
           </div>
 
           {/* 右侧：预览/展示区 */}
