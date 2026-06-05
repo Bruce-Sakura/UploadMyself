@@ -55,5 +55,11 @@ export const uploadFile = (file: File) => {
   return api.post<UploadResult>('/upload', fd);
 };
 
+export const uploadCorpus = (file: File) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  return api.post<{ text: string; method: string; name: string }>('/upload-corpus', fd);
+};
+
 /* ── Tasks ──────────────────────────────────────────────── */
 export const getTask = (id: string) => api.get<Task>(`/tasks/${id}`);

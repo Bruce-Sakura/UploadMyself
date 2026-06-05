@@ -33,7 +33,10 @@ var AllowedMIMETypes = map[string]bool{
 	"image/gif":            true,
 	"application/pdf":      true,
 	"text/plain":           true,
+	"text/markdown":        true,
 	"application/json":     true,
+	"application/msword":   true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
 }
 
 // UploadFile handles multipart file upload, saves with UUID filename.
@@ -62,7 +65,8 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	allowedExts := map[string]bool{
 		".wav": true, ".mp3": true, ".flac": true, ".ogg": true, ".webm": true,
 		".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".gif": true,
-		".pdf": true, ".txt": true, ".json": true,
+		".pdf": true, ".txt": true, ".json": true, ".md": true,
+		".doc": true, ".docx": true,
 	}
 	if ext != "" && !allowedExts[ext] {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("file extension not allowed: %s", ext)})

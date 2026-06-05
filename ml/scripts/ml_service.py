@@ -18,9 +18,8 @@ from pathlib import Path
 
 # CharacterGen paths
 CHARACTERGEN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "charactergen")
-# Add 2D_Stage and 3D_Stage first, then CHARACTERGEN_DIR so its webui.py takes priority
-sys.path.insert(0, os.path.join(CHARACTERGEN_DIR, "2D_Stage"))
-sys.path.insert(0, os.path.join(CHARACTERGEN_DIR, "3D_Stage"))
+# Only add CHARACTERGEN_DIR so root webui.py (with Inference2D_API / Inference3D_API) is found
+# Do NOT add 2D_Stage or 3D_Stage — their webui.py would shadow the root one
 sys.path.insert(0, CHARACTERGEN_DIR)
 
 # Global model instances (lazy loaded)

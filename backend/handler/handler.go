@@ -8,6 +8,7 @@ import (
 	"os"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -358,6 +359,54 @@ func (h *Handler) SynthesizeVoice(c *gin.Context) {
 
 	audioPath, _ := result["audio_path"]
 	c.JSON(http.StatusOK, gin.H{"audio_path": audioPath, "result": result})
+}
+
+// ==================== Upload Corpus ====================
+
+// UploadCorpus accepts a file upload and extracts text from it (PDF, DOCX, image OCR, text).
+func (h *Handler) UploadCorpus(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		return
+	}
+
+	// Save to temp file
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	tmpPath := filepath.Join(os.TempDir(), "uploadmyself_corpus_"+uuid.New().String()+ext)
+	if err := c.SaveUploadedFile(file, tmpPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save temp file"})
+		return
+	}
+	defer os.Remove(tmpPath)
+
+	// Call extract_text.py
+	script := fmt.Sprintf("%s/extract_text.py", MLScriptsDir)
+	cmd := exec.Command(PythonBin, script, "--input", tmpPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("extraction failed: %s", string(out))})
+		return
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(out, &result); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid extraction output"})
+		return
+	}
+
+	if e, ok := result["error"]; ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("%v", e)})
+		return
+	}
+
+	text, _ := result["text"]
+	method, _ := result["method"]
+	c.JSON(http.StatusOK, gin.H{
+		"text":   text,
+		"method": method,
+		"name":   file.Filename,
+	})
 }
 
 // ==================== Skill Processing ====================

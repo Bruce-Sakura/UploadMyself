@@ -83,6 +83,7 @@ func main() {
 		// Upload & file serving
 		v1.POST("/upload", h.UploadFile)
 		v1.GET("/files/:id", h.ServeFile)
+		v1.POST("/upload-corpus", h.UploadCorpus)
 		// Serve uploaded files directly by filename
 		r.Static("/uploads", uploadsDir)
 
