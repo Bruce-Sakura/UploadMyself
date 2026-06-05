@@ -311,7 +311,7 @@ func (h *Handler) TrainVoice(c *gin.Context) {
 		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
 	}()
 
-	c.JSON(http.StatusAccepted, gin.H{"task_id": task.ID, "status": "training"})
+	c.JSON(http.StatusAccepted, gin.H{"id": task.ID, "status": "training"})
 }
 
 // SynthesizeVoice calls voice_synthesize.py and returns audio.
@@ -464,7 +464,7 @@ func (h *Handler) ProcessSkill(c *gin.Context) {
 		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
 	}()
 
-	c.JSON(http.StatusAccepted, gin.H{"task_id": task.ID, "status": "processing"})
+	c.JSON(http.StatusAccepted, gin.H{"id": task.ID, "status": "processing"})
 }
 
 // ==================== Avatar Processing ====================
@@ -545,5 +545,5 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 		UpdateTaskStatus(h.db, task.ID, "done", 100, "")
 	}()
 
-	c.JSON(http.StatusAccepted, gin.H{"task_id": task.ID, "status": "processing"})
+	c.JSON(http.StatusAccepted, gin.H{"id": task.ID, "status": "processing"})
 }
