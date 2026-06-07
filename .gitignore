@@ -72,3 +72,4 @@ ml/charactergen/outputs/
 *.bin
 *.safetensors
 *.ckpt
+/.claude/

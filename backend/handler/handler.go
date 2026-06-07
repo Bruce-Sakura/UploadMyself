@@ -527,13 +527,21 @@ func (h *Handler) ProcessAvatar(c *gin.Context) {
 			return
 		}
 
-		// Convert paths to relative URLs
-		for _, key := range []string{"cartoon_image", "skeleton_image", "animation_data"} {
-			if v, ok := result[key]; ok {
-				result[key] = strings.Replace(fmt.Sprintf("%v", v), UploadDir, "uploads", 1)
+		// Convert string-valued paths to servable /uploads URLs.
+		// ml_service.py returns: cartoon_image, glb_model, obj_model (strings) + views ([]string).
+		for _, key := range []string{"cartoon_image", "glb_model", "obj_model"} {
+			if v, ok := result[key].(string); ok {
+				result[key] = strings.Replace(v, UploadDir, "uploads", 1)
 			}
 		}
-		// Store full JSON as result (contains cartoon + skeleton + animation paths)
+		if views, ok := result["views"].([]interface{}); ok {
+			for i, v := range views {
+				if s, ok := v.(string); ok {
+					views[i] = strings.Replace(s, UploadDir, "uploads", 1)
+				}
+			}
+		}
+		// Store full JSON as result (contains cartoon + views + glb/obj paths)
 		animJSON, _ := json.Marshal(result)
 		h.db.Model(&a).Update("result", string(animJSON))
 		// Store cartoon as output_path for quick access
