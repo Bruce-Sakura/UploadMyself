@@ -58,8 +58,8 @@ def load_models():
     os.chdir(original_dir)
 
 
-def generate_avatar(input_path: str, output_dir: str, seed: int = 2333, timestep: int = 40) -> dict:
-    """Full CharacterGen pipeline."""
+def generate_avatar(input_path: str, output_dir: str, seed: int = 2333, timestep: int = 40, mode: str = "3d") -> dict:
+    """CharacterGen pipeline. mode='2d' stops after the 4-view stage (no 3D recon)."""
     import torch
     import numpy as np
     from PIL import Image
@@ -70,12 +70,12 @@ def generate_avatar(input_path: str, output_dir: str, seed: int = 2333, timestep
     os.chdir(CHARACTERGEN_DIR)
 
     try:
-        return _generate_avatar_inner(input_path, output_dir, seed, timestep)
+        return _generate_avatar_inner(input_path, output_dir, seed, timestep, mode)
     finally:
         os.chdir(original_dir)
 
 
-def _generate_avatar_inner(input_path: str, output_dir: str, seed: int, timestep: int) -> dict:
+def _generate_avatar_inner(input_path: str, output_dir: str, seed: int, timestep: int, mode: str = "3d") -> dict:
     """Inner function that runs in CharacterGen directory."""
     from webui import traverse
     from pygltflib import GLTF2
@@ -103,6 +103,14 @@ def _generate_avatar_inner(input_path: str, output_dir: str, seed: int, timestep
         path = os.path.join(output_dir, f"view_{name}.png")
         view.save(path)
         view_paths.append(path)
+
+    # 2D mode: stop here, return cartoon + multi-view images only (skip 3D recon).
+    if mode == "2d":
+        print("[2D] Skipping 3D reconstruction.", flush=True)
+        return {
+            "cartoon_image": clean_path,
+            "views": view_paths,
+        }
 
     # Step 3: 3D reconstruction
     print("[3/3] Reconstructing 3D...", flush=True)
@@ -153,6 +161,7 @@ class MLHandler(BaseHTTPRequestHandler):
         output_dir = data.get("output_dir", "")
         seed = data.get("seed", 2333)
         timestep = data.get("timestep", 40)
+        mode = data.get("mode", "3d")
 
         if not input_path or not output_dir:
             self._respond(400, {"error": "input_path and output_dir required"})
@@ -160,7 +169,7 @@ class MLHandler(BaseHTTPRequestHandler):
 
         try:
             load_models()
-            result = generate_avatar(input_path, output_dir, seed, timestep)
+            result = generate_avatar(input_path, output_dir, seed, timestep, mode)
             self._respond(200, result)
         except Exception as e:
             self._respond(500, {"error": str(e)})

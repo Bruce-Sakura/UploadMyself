@@ -1,130 +1,142 @@
 package main
 
 import (
+	"context"
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
-	"github.com/Bruce-Sakura/UploadMyself/backend/agent"
-	"github.com/Bruce-Sakura/UploadMyself/backend/handler"
+	"github.com/Bruce-Sakura/UploadMyself/backend/internal/llm"
 	"github.com/Bruce-Sakura/UploadMyself/backend/middleware"
-	"github.com/Bruce-Sakura/UploadMyself/backend/model"
+
+	avatarhandler "github.com/Bruce-Sakura/UploadMyself/backend/pkg/avatars/handler"
+	avatarmapper "github.com/Bruce-Sakura/UploadMyself/backend/pkg/avatars/mapper"
+	avatarimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/avatars/service/impl"
+
+	filehandler "github.com/Bruce-Sakura/UploadMyself/backend/pkg/file_uploads/handler"
+	filemapper "github.com/Bruce-Sakura/UploadMyself/backend/pkg/file_uploads/mapper"
+	fileimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/file_uploads/service/impl"
+
+	msghandler "github.com/Bruce-Sakura/UploadMyself/backend/pkg/messages/handler"
+	msgmapper "github.com/Bruce-Sakura/UploadMyself/backend/pkg/messages/mapper"
+	msgimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/messages/service/impl"
+
+	skillhandler "github.com/Bruce-Sakura/UploadMyself/backend/pkg/skills/handler"
+	skillmapper "github.com/Bruce-Sakura/UploadMyself/backend/pkg/skills/mapper"
+	skillimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/skills/service/impl"
+
+	taskhandler "github.com/Bruce-Sakura/UploadMyself/backend/pkg/tasks/handler"
+	taskmapper "github.com/Bruce-Sakura/UploadMyself/backend/pkg/tasks/mapper"
+	taskimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/tasks/service/impl"
+
+	voicehandler "github.com/Bruce-Sakura/UploadMyself/backend/pkg/voices/handler"
+	voicemapper "github.com/Bruce-Sakura/UploadMyself/backend/pkg/voices/mapper"
+	voiceimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/voices/service/impl"
+
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
+//go:embed migrations/001_init.sql
+var initSQL string
+
 func main() {
-	// Config
+	// ---- Config ----
 	viper.AutomaticEnv()
 	viper.SetDefault("APP_PORT", 8000)
-	viper.SetDefault("DB_DSN", "host=localhost user=uploadmyself password=*** dbname=uploadmyself port=5432 sslmode=disable")
+	viper.SetDefault("DB_DSN", "host=localhost user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable")
 	viper.SetDefault("ML_SCRIPTS_DIR", "../ml/scripts")
 	viper.SetDefault("PYTHON_BIN", "python3")
-	// LLM 配置
+	viper.SetDefault("ML_SERVICE_URL", "http://host.docker.internal:8001")
 	viper.SetDefault("LLM_API_KEY", "")
 	viper.SetDefault("LLM_BASE_URL", "https://api.openai.com/v1")
-	viper.SetDefault("LLM_MODEL", "gpt-4o")
+	viper.SetDefault("LLM_MODEL", "mimo-v2.5-pro")
 
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	// Configure handler-level globals for ML scripts
-	handler.MLScriptsDir = viper.GetString("ML_SCRIPTS_DIR")
-	handler.PythonBin = viper.GetString("PYTHON_BIN")
-
-	// Ensure uploads directory exists
 	uploadsDir := "./uploads"
 	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
 		log.Fatalf("create uploads dir: %v", err)
 	}
-	handler.UploadDir = uploadsDir
 
-	// Database
-	db, err := model.Connect(viper.GetString("DB_DSN"))
+	// ---- Database (pgxpool) ----
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, viper.GetString("DB_DSN"))
 	if err != nil {
 		log.Fatalf("db connect: %v", err)
 	}
-	logger.Info("database connected")
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("db ping: %v", err)
+	}
+	if err := runMigrations(ctx, pool); err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
+	logger.Info("database connected & migrated")
 
-	// Auto-migrate agent models
-	db.AutoMigrate(&agent.Message{})
-
-	// LLM Client
-	llmClient := agent.NewLLMClient(
+	// ---- LLM client ----
+	llmClient := llm.New(
 		viper.GetString("LLM_API_KEY"),
 		viper.GetString("LLM_BASE_URL"),
 		viper.GetString("LLM_MODEL"),
 	)
 
-	// Agent
-	agt := agent.New(db, llmClient)
+	mlScriptsDir := viper.GetString("ML_SCRIPTS_DIR")
+	pythonBin := viper.GetString("PYTHON_BIN")
+	mlServiceURL := viper.GetString("ML_SERVICE_URL")
 
-	// Router
+	// ---- Dependency injection: mapper -> service -> handler ----
+	taskSvc := taskimpl.NewTaskService(taskmapper.NewTaskMapper(pool))
+	taskH := taskhandler.NewTaskHandler(taskSvc)
+
+	skillSvc := skillimpl.NewSkillService(skillmapper.NewSkillMapper(pool), taskSvc, llmClient)
+	skillH := skillhandler.NewSkillHandler(skillSvc)
+
+	voiceSvc := voiceimpl.NewVoiceService(voicemapper.NewVoiceMapper(pool), taskSvc, voiceimpl.Config{
+		MLScriptsDir: mlScriptsDir,
+		PythonBin:    pythonBin,
+		UploadDir:    uploadsDir,
+	})
+	voiceH := voicehandler.NewVoiceHandler(voiceSvc)
+
+	avatarSvc := avatarimpl.NewAvatarService(avatarmapper.NewAvatarMapper(pool), taskSvc, avatarimpl.Config{
+		MLServiceURL: mlServiceURL,
+		UploadDir:    uploadsDir,
+	})
+	avatarH := avatarhandler.NewAvatarHandler(avatarSvc)
+
+	fileSvc := fileimpl.NewFileUploadService(filemapper.NewFileUploadMapper(pool), fileimpl.Config{
+		UploadDir:    uploadsDir,
+		MLScriptsDir: mlScriptsDir,
+		PythonBin:    pythonBin,
+	})
+	fileH := filehandler.NewFileUploadHandler(fileSvc)
+
+	agentSvc := msgimpl.NewAgentService(msgmapper.NewMessageMapper(pool), llmClient, skillSvc)
+	agentH := msghandler.NewAgentHandler(agentSvc)
+
+	// ---- Router ----
 	r := gin.Default()
 	r.Use(middleware.CORS())
-
-	// Health
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
+	r.Static("/uploads", uploadsDir)
 
-	// API v1
-	h := handler.New(db, agt)
 	v1 := r.Group("/api/v1")
-	{
-		// Agent（核心对话）
-		agentGroup := v1.Group("/agent")
-		{
-			agentGroup.POST("/chat", h.AgentChat)
-			agentGroup.GET("/tools", h.ListTools)
-		}
+	taskH.Register(v1)
+	skillH.Register(v1)
+	voiceH.Register(v1)
+	avatarH.Register(v1)
+	fileH.Register(v1)
+	agentH.Register(v1)
 
-		// Upload & file serving
-		v1.POST("/upload", h.UploadFile)
-		v1.GET("/files/:id", h.ServeFile)
-		v1.POST("/upload-corpus", h.UploadCorpus)
-		// Serve uploaded files directly by filename
-		r.Static("/uploads", uploadsDir)
-
-		// Skills
-		skill := v1.Group("/skills")
-		{
-			skill.POST("", h.CreateSkill)
-			skill.GET("", h.ListSkills)
-			skill.GET("/:id", h.GetSkill)
-			skill.PUT("/:id", h.UpdateSkill)
-			skill.DELETE("/:id", h.DeleteSkill)
-			skill.POST("/:id/process", h.ProcessSkill)
-		}
-		// Voices
-		voice := v1.Group("/voices")
-		{
-			voice.POST("", h.CreateVoice)
-			voice.GET("", h.ListVoices)
-			voice.GET("/:id", h.GetVoice)
-			voice.DELETE("/:id", h.DeleteVoice)
-			voice.POST("/:id/train", h.TrainVoice)
-			voice.POST("/:id/synthesize", h.SynthesizeVoice)
-		}
-		// Avatars
-		avatar := v1.Group("/avatars")
-		{
-			avatar.POST("", h.CreateAvatar)
-			avatar.GET("", h.ListAvatars)
-			avatar.GET("/:id", h.GetAvatar)
-			avatar.DELETE("/:id", h.DeleteAvatar)
-			avatar.POST("/:id/process", h.ProcessAvatar)
-		}
-		// Tasks
-		task := v1.Group("/tasks")
-		{
-			task.GET("", h.ListTasks)
-			task.GET("/:id", h.GetTask)
-		}
-	}
-
-	// Serve
+	// ---- Serve ----
 	addr := fmt.Sprintf(":%d", viper.GetInt("APP_PORT"))
 	go func() {
 		logger.Info("starting server", zap.String("addr", addr))
@@ -137,4 +149,18 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.Info("shutting down")
+}
+
+// runMigrations executes the embedded DDL statement-by-statement.
+// (pgx's extended protocol rejects multi-statement strings, so we split on ';'.)
+func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	for _, stmt := range strings.Split(initSQL, ";") {
+		if strings.TrimSpace(stmt) == "" {
+			continue
+		}
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("%w\nstatement: %s", err, strings.TrimSpace(stmt))
+		}
+	}
+	return nil
 }
