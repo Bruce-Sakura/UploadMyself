@@ -27,13 +27,14 @@ import {
   processSkill,
   getSkill,
   uploadCorpus,
+  importSkill,
 } from '../api/endpoints';
 import { pollTask } from '../hooks/useTaskPoller';
 import type { UploadFile } from 'antd/es/upload/interface';
 import type { PreviewState } from '../App';
 
 const { TextArea } = Input;
-const { Title, Paragraph } = Typography;
+const { Title, Paragraph, Text } = Typography;
 
 const STATUS_MAP: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
   pending: { color: 'default', icon: <LoadingOutlined />, text: '等待中' },
@@ -54,6 +55,9 @@ export default function SkillClone({ setPreview }: Props) {
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [corpus, setCorpus] = useState('');
+  const [importUrl, setImportUrl] = useState('');
+  const [importName, setImportName] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const showInPreview = (title: string, content: React.ReactNode) => {
     setPreview({ visible: true, title, content });
@@ -131,6 +135,42 @@ export default function SkillClone({ setPreview }: Props) {
     }
   };
 
+  const handleImport = async () => {
+    if (!importUrl.trim()) {
+      message.warning('请输入 SKILL.md 的 URL（支持 GitHub 链接）');
+      return;
+    }
+    setImporting(true);
+    try {
+      const { data: skill } = await importSkill({
+        url: importUrl.trim(),
+        name: importName.trim() || undefined,
+      });
+      message.success(`已导入「${skill.name}」`);
+      setImportUrl('');
+      setImportName('');
+      showInPreview('🧠 导入的思维框架', (
+        <pre style={{
+          background: '#f6f8fa',
+          padding: 16,
+          borderRadius: 8,
+          overflow: 'auto',
+          maxHeight: 'calc(100vh - 240px)',
+          fontSize: 13,
+          lineHeight: 1.6,
+          whiteSpace: 'pre-wrap',
+        }}>
+          {skill.result}
+        </pre>
+      ));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '导入失败';
+      message.error(msg);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const onFinish = async (values: { name: string; corpus: string }) => {
     setLoading(true);
     setStatus('pending');
@@ -187,6 +227,32 @@ export default function SkillClone({ setPreview }: Props) {
       <Paragraph type="secondary">
         上传你的文本语料或文件（PDF/Word/图片），AI 将分析并生成属于你的思维 Skill 框架。
       </Paragraph>
+
+      <Card size="small" style={{ marginBottom: 16, background: '#fafafa' }}>
+        <Text strong>从 URL / GitHub 导入现成 SKILL.md</Text>
+        <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+          <Input
+            placeholder="https://github.com/owner/repo/blob/main/SKILL.md 或 raw 链接"
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            onPressEnter={handleImport}
+          />
+          <Input
+            placeholder="名称(可选)"
+            value={importName}
+            onChange={(e) => setImportName(e.target.value)}
+            style={{ maxWidth: 160 }}
+          />
+          <Button
+            type="primary"
+            icon={importing ? <LoadingOutlined /> : <UploadOutlined />}
+            loading={importing}
+            onClick={handleImport}
+          >
+            导入
+          </Button>
+        </Space.Compact>
+      </Card>
 
       <Card>
         <Form form={form} layout="vertical" onFinish={onFinish}>

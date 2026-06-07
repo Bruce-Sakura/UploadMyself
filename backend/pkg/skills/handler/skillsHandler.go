@@ -20,6 +20,7 @@ func NewSkillHandler(svc service.SkillService) *SkillHandler {
 func (h *SkillHandler) Register(rg *gin.RouterGroup) {
 	g := rg.Group("/skills")
 	g.POST("", h.Create)
+	g.POST("/import", h.Import)
 	g.GET("", h.List)
 	g.GET("/:id", h.Get)
 	g.PUT("/:id", h.Update)
@@ -79,6 +80,20 @@ func (h *SkillHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+func (h *SkillHandler) Import(c *gin.Context) {
+	var req dto.ImportSkillReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	sk, err := h.svc.Import(c.Request.Context(), req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, sk)
 }
 
 func (h *SkillHandler) Process(c *gin.Context) {

@@ -12,6 +12,9 @@ export const getSkill = (id: string) => api.get<Skill>(`/skills/${id}`);
 export const processSkill = (id: string) =>
   api.post<Task>(`/skills/${id}/process`);
 
+export const importSkill = (data: { name?: string; url?: string; content?: string }) =>
+  api.post<Skill>('/skills/import', data);
+
 export const deleteSkill = (id: string) => api.delete(`/skills/${id}`);
 
 /* ── Voices ─────────────────────────────────────────────── */

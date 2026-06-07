@@ -32,7 +32,7 @@
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | Go (Gin + GORM + Asynq + Viper + Zap) |
+| **Backend** | Go (Gin + pgx/pgxpool + Viper + Zap) |
 | **Frontend** | React 18 + TypeScript + Three.js + Ant Design |
 | **Database** | PostgreSQL + Redis |
 | **Storage** | MinIO (S3-compatible) |
@@ -87,7 +87,54 @@ make build          # Build Go binary
 make frontend-build # Build React app
 make test           # Run all tests
 make lint           # Run linters
+
+# Build the upme CLI
+cd backend && go build -o upme ./cmd/upme
 ```
+
+---
+
+## 🖥️ CLI (`upme`)
+
+`upme` is a small CLI client for the backend REST API.
+
+```bash
+cd backend && go build -o upme ./cmd/upme
+```
+
+The server address defaults to `http://localhost:8000`; override it with the
+`-server` flag or the `$UPME_SERVER` environment variable.
+
+```bash
+upme health                                   # health check
+
+upme skill list                               # list all skills
+upme skill get    -id <id>                     # show one skill (incl. SKILL.md)
+upme skill import -url <github/raw url> [-name <n>]   # import from a URL
+upme skill import -file <path>          [-name <n>]   # import from a local file
+upme skill new    -name <n> -corpus <text|@file>     # generate from corpus (LLM)
+upme skill rm     -id <id>                      # delete a skill
+
+upme chat -skill <id> -m "<message>" [-conv <id>]    # chat with your twin
+```
+
+---
+
+## 📥 Importing a Skill
+
+Bring a ready-made `SKILL.md` into the system without re-running the LLM:
+
+```
+POST /api/v1/skills/import
+{ "url": "https://github.com/owner/repo/blob/main/path/SKILL.md", "name": "optional" }
+# or
+{ "content": "---\nname: my-skill\n---\n...", "name": "optional" }
+```
+
+- Provide **either** `url` **or** `content`.
+- GitHub `blob` web URLs are automatically rewritten to their `raw.githubusercontent.com` form.
+- If `name` is omitted, it is taken from the `name:` field of the YAML frontmatter
+  (the Claude Agent Skills format), falling back to `imported-skill`.
 
 ---
 
@@ -95,22 +142,53 @@ make lint           # Run linters
 
 ```
 UploadMyself/
-├── backend/                 # Go backend (Gin)
-│   ├── handler/             # HTTP handlers (CRUD)
-│   ├── model/               # GORM models (Skill/Voice/Avatar/Task)
-│   ├── middleware/           # CORS, auth, etc.
-│   └── main.go              # Entry point
-├── ml/                      # ML models & Python scripts
-│   ├── models/              # Pretrained weights
-│   └── scripts/             # Preprocessing & training
-├── frontend/                # React + Three.js
+├── backend/                      # Go backend (Gin, layered modules)
+│   ├── main.go                   # Entry point: DI wiring, pgxpool, embedded migrations
+│   ├── migrations/
+│   │   └── 001_init.sql          # DDL, embedded via go:embed & run at startup
+│   ├── internal/
+│   │   └── llm/client.go         # OpenAI-compatible LLM client
+│   ├── pkg/                      # One module per table, six layers each
+│   │   ├── tasks/                # ← module template (entity/dto/mapper/service/service/impl/handler)
+│   │   │   ├── entity/           #   table struct
+│   │   │   ├── dto/              #   request/response objects
+│   │   │   ├── mapper/           #   pgx data access
+│   │   │   ├── service/          #   business-logic interface
+│   │   │   ├── service/impl/     #   interface implementation
+│   │   │   └── handler/          #   HTTP handlers + route Register
+│   │   ├── skills/               # Thinking-framework / SKILL.md generation
+│   │   ├── voices/               # Voice cloning (train / synthesize)
+│   │   ├── avatars/              # 2D/3D avatar processing
+│   │   ├── file_uploads/         # File & corpus uploads (OCR/PDF/Word)
+│   │   └── messages/             # Agent chat, conversation messages, tool registry
+│   ├── cmd/
+│   │   └── upme/                 # `upme` CLI client for the REST API
+│   └── middleware/               # CORS, etc.
+├── ml/                           # ML models & Python scripts
+│   ├── models/                   # Pretrained weights
+│   └── scripts/                  # Preprocessing & training (ml_service.py)
+├── frontend/                     # React + Three.js
 │   └── src/
-│       ├── pages/           # UI pages
-│       └── three/           # 3D rendering
-├── skills/                  # Generated user skills
-├── docs/                    # Documentation
-└── tests/                   # Tests
+│       ├── pages/                # UI pages
+│       └── three/                # 3D rendering
+├── skills/                       # Skill packages — <id>/SKILL.md (+ meta.json) per skill
+├── docs/                         # Documentation
+└── tests/                        # Tests
 ```
+
+> **Skill storage** — generated and imported thinking frameworks are stored as
+> files, not blobs in the DB. Each skill is a directory `<SKILLS_DIR>/<id>/`
+> containing `SKILL.md` (the framework) and `meta.json` (name/source/timestamp).
+> The Postgres `skills` table is only a metadata index (id, name, status…); the
+> `SKILL.md` body is read from disk. `SKILLS_DIR` defaults to `./skills` and is
+> mounted as a Docker volume so skills survive container restarts.
+
+> **Module layering** — every package under `backend/pkg/` follows the same six-layer
+> shape, with `backend/pkg/tasks` as the reference template:
+> `entity` (table struct) → `dto` (I/O objects) → `mapper` (pgx data access) →
+> `service` (interface) → `service/impl` (implementation) → `handler` (HTTP + routes).
+> Dependencies are wired in `main.go` as `mapper → service → handler`. The legacy
+> `backend/agent`, `backend/handler`, and `backend/model` packages have been removed.
 
 ---
 
@@ -158,7 +236,7 @@ MIT License — see [LICENSE](LICENSE).
 
 ### 技术栈
 
-- **后端**：Golang (Gin + GORM + Asynq + Viper + Zap)
+- **后端**：Golang (Gin + pgx/pgxpool + Viper + Zap，分层模块结构)
 - **前端**：React 18 + TypeScript + Three.js + Ant Design
 - **数据库**：PostgreSQL + Redis
 - **存储**：MinIO
@@ -185,6 +263,45 @@ cd backend && go run .
 # 启动前端 (端口 5173)
 cd frontend && npm run dev
 ```
+
+### CLI (upme)
+
+`upme` 是后端 REST API 的命令行客户端。后端地址默认 `http://localhost:8000`，
+可用 `-server` 或环境变量 `$UPME_SERVER` 覆盖。
+
+```bash
+# 构建
+cd backend && go build -o upme ./cmd/upme
+
+upme health                                          # 健康检查
+upme skill list                                      # 列出所有思维框架
+upme skill get    -id <id>                           # 查看单个 skill（含 SKILL.md）
+upme skill import -url <url> [-name <n>]             # 从 URL/GitHub 导入
+upme skill import -file <path> [-name <n>]           # 从本地文件导入
+upme skill new    -name <n> -corpus <text|@file>     # 用语料生成（触发 LLM）
+upme skill rm     -id <id>                            # 删除
+upme chat -skill <id> -m "<消息>" [-conv <id>]        # 与分身对话
+```
+
+### 导入 Skill
+
+无需重新跑 LLM，即可导入现成的 `SKILL.md`：
+
+```
+POST /api/v1/skills/import
+{ "url": "https://github.com/owner/repo/blob/main/path/SKILL.md", "name": "可选" }
+# 或
+{ "content": "---\nname: my-skill\n---\n...", "name": "可选" }
+```
+
+- `url` 与 `content` 二选一。
+- GitHub `blob` 网页地址会自动转换为 `raw.githubusercontent.com` 原始地址。
+- 不传 `name` 时，从 YAML frontmatter 的 `name:` 字段解析（Claude Agent Skills 格式），
+  兜底为 `imported-skill`。
+
+> **Skill 文件存储**：生成/导入的思维框架以文件形式保存在
+> `<SKILLS_DIR>/<id>/SKILL.md`（+ `meta.json`），数据库 `skills` 表仅做元数据索引。
+> `SKILLS_DIR` 默认 `./skills`，Docker 中挂载为 `skills` 卷。
 
 ### 开发进度
 

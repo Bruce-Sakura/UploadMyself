@@ -26,3 +26,11 @@ type UpdateSkillReq struct {
 	Status *string `json:"status"`
 	Result *string `json:"result"`
 }
+
+// ImportSkillReq imports a ready-made SKILL.md from a URL (GitHub/raw/hub) or
+// inline content. Exactly one of URL / Content should be provided.
+type ImportSkillReq struct {
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Content string `json:"content"`
+}

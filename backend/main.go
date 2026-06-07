@@ -54,6 +54,7 @@ func main() {
 	viper.SetDefault("ML_SCRIPTS_DIR", "../ml/scripts")
 	viper.SetDefault("PYTHON_BIN", "python3")
 	viper.SetDefault("ML_SERVICE_URL", "http://host.docker.internal:8001")
+	viper.SetDefault("SKILLS_DIR", "./skills")
 	viper.SetDefault("LLM_API_KEY", "")
 	viper.SetDefault("LLM_BASE_URL", "https://api.openai.com/v1")
 	viper.SetDefault("LLM_MODEL", "mimo-v2.5-pro")
@@ -64,6 +65,10 @@ func main() {
 	uploadsDir := "./uploads"
 	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
 		log.Fatalf("create uploads dir: %v", err)
+	}
+	skillsDir := viper.GetString("SKILLS_DIR")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		log.Fatalf("create skills dir: %v", err)
 	}
 
 	// ---- Database (pgxpool) ----
@@ -96,7 +101,9 @@ func main() {
 	taskSvc := taskimpl.NewTaskService(taskmapper.NewTaskMapper(pool))
 	taskH := taskhandler.NewTaskHandler(taskSvc)
 
-	skillSvc := skillimpl.NewSkillService(skillmapper.NewSkillMapper(pool), taskSvc, llmClient)
+	skillSvc := skillimpl.NewSkillService(skillmapper.NewSkillMapper(pool), taskSvc, llmClient, skillimpl.Config{
+		SkillsDir: skillsDir,
+	})
 	skillH := skillhandler.NewSkillHandler(skillSvc)
 
 	voiceSvc := voiceimpl.NewVoiceService(voicemapper.NewVoiceMapper(pool), taskSvc, voiceimpl.Config{

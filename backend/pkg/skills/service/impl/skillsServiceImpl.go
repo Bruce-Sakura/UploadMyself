@@ -15,14 +15,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// Config holds runtime settings for skill file storage.
+type Config struct {
+	SkillsDir string // root dir for skill packages: <SkillsDir>/<id>/SKILL.md
+}
+
 type SkillServiceImpl struct {
 	mapper  *mapper.SkillMapper
 	taskSvc taskservice.TaskService
 	llm     *llm.Client
+	cfg     Config
 }
 
-func NewSkillService(m *mapper.SkillMapper, taskSvc taskservice.TaskService, llmClient *llm.Client) service.SkillService {
-	return &SkillServiceImpl{mapper: m, taskSvc: taskSvc, llm: llmClient}
+func NewSkillService(m *mapper.SkillMapper, taskSvc taskservice.TaskService, llmClient *llm.Client, cfg Config) service.SkillService {
+	return &SkillServiceImpl{mapper: m, taskSvc: taskSvc, llm: llmClient, cfg: cfg}
 }
 
 func (s *SkillServiceImpl) Create(ctx context.Context, req dto.CreateSkillReq) (*dto.SkillVO, error) {
@@ -43,7 +49,9 @@ func (s *SkillServiceImpl) Get(ctx context.Context, id string) (*dto.SkillVO, er
 	if err != nil {
 		return nil, err
 	}
-	return toVO(sk), nil
+	vo := toVO(sk)
+	vo.Result = s.readSkillFile(id) // SKILL.md lives on disk
+	return vo, nil
 }
 
 func (s *SkillServiceImpl) List(ctx context.Context) ([]dto.SkillVO, error) {
@@ -53,20 +61,32 @@ func (s *SkillServiceImpl) List(ctx context.Context) ([]dto.SkillVO, error) {
 	}
 	out := make([]dto.SkillVO, 0, len(sks))
 	for i := range sks {
-		out = append(out, *toVO(&sks[i]))
+		vo := toVO(&sks[i])
+		vo.Result = s.readSkillFile(vo.ID)
+		out = append(out, *vo)
 	}
 	return out, nil
 }
 
 func (s *SkillServiceImpl) Update(ctx context.Context, id string, req dto.UpdateSkillReq) (*dto.SkillVO, error) {
-	if err := s.mapper.Update(ctx, id, req.Name, req.Corpus, req.Status, req.Result); err != nil {
+	// SKILL.md content is stored on disk, not in DB.
+	if req.Result != nil {
+		if err := s.writeSkillFile(id, *req.Result); err != nil {
+			return nil, err
+		}
+		req.Result = nil
+	}
+	if err := s.mapper.Update(ctx, id, req.Name, req.Corpus, req.Status, nil); err != nil {
 		return nil, err
 	}
 	return s.Get(ctx, id)
 }
 
 func (s *SkillServiceImpl) Delete(ctx context.Context, id string) error {
-	return s.mapper.Delete(ctx, id)
+	if err := s.mapper.Delete(ctx, id); err != nil {
+		return err
+	}
+	return s.removeSkillDir(id)
 }
 
 func (s *SkillServiceImpl) Process(ctx context.Context, id string) (string, error) {
@@ -115,9 +135,59 @@ func (s *SkillServiceImpl) runProcess(taskID, skillID, name, corpus string) {
 		return
 	}
 
+	// Persist SKILL.md to disk (file storage), DB only tracks status.
+	if err := s.writeSkillFile(skillID, reply); err != nil {
+		failed := "failed"
+		_ = s.mapper.Update(ctx, skillID, nil, nil, &failed, nil)
+		_ = s.taskSvc.UpdateStatus(ctx, taskID, "failed", 0, fmt.Sprintf("write skill file: %v", err))
+		return
+	}
+
 	done := "done"
-	_ = s.mapper.Update(ctx, skillID, nil, nil, &done, &reply)
+	_ = s.mapper.Update(ctx, skillID, nil, nil, &done, nil)
 	_ = s.taskSvc.UpdateStatus(ctx, taskID, "done", 100, "")
+}
+
+func (s *SkillServiceImpl) Import(ctx context.Context, req dto.ImportSkillReq) (*dto.SkillVO, error) {
+	content := req.Content
+	source := "inline"
+	if content == "" {
+		if req.URL == "" {
+			return nil, fmt.Errorf("either url or content is required")
+		}
+		body, err := downloadSkill(ctx, req.URL)
+		if err != nil {
+			return nil, err
+		}
+		content = body
+		source = req.URL
+	}
+	if content == "" {
+		return nil, fmt.Errorf("downloaded skill is empty")
+	}
+
+	// Derive a name: explicit > frontmatter name > fallback.
+	name := req.Name
+	if name == "" {
+		name = parseFrontmatterName(content)
+	}
+	if name == "" {
+		name = "imported-skill"
+	}
+
+	id := uuid.NewString()
+	if err := s.writeSkillFile(id, content); err != nil {
+		return nil, err
+	}
+	if err := s.writeSkillMeta(id, name, source); err != nil {
+		return nil, err
+	}
+
+	sk := &entity.Skill{ID: id, Name: name, Corpus: "", Status: "done"}
+	if err := s.mapper.Insert(ctx, sk); err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, id)
 }
 
 func toVO(s *entity.Skill) *dto.SkillVO {
