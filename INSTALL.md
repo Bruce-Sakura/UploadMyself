@@ -99,7 +99,7 @@ Docker config: repo-root `.env`. Native config: `~/.UploadMyself/.env`.
 | `LLM_API_KEY` | LLM 密钥（MiMo / OpenAI 兼容）/ LLM key |
 | `LLM_BASE_URL` | LLM 接口地址，默认 MiMo / LLM base url |
 | `LLM_MODEL` | 模型名，默认 `mimo-v2.5-pro` / model |
-| `DB_DSN` | PostgreSQL 连接串 / DB DSN |
+| `DB_PATH` | SQLite 数据库文件路径 / SQLite db file path |
 | `UPLOAD_DIR` `SKILLS_DIR` | 上传 / skill 包目录 / dirs |
 | `ML_SERVICE_URL` | ML 服务地址 / ML service url |
 | `HF_HOME` | HuggingFace 模型缓存 / model cache |

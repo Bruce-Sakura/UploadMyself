@@ -2,24 +2,23 @@ package mapper
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/Bruce-Sakura/UploadMyself/backend/pkg/messages/entity"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // MessageMapper is the data-access layer for the messages table.
 type MessageMapper struct {
-	pool *pgxpool.Pool
+	db *sql.DB
 }
 
-func NewMessageMapper(pool *pgxpool.Pool) *MessageMapper {
-	return &MessageMapper{pool: pool}
+func NewMessageMapper(db *sql.DB) *MessageMapper {
+	return &MessageMapper{db: db}
 }
 
 func (m *MessageMapper) Insert(ctx context.Context, convID, role, content string) error {
-	_, err := m.pool.Exec(ctx,
-		`INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)`,
+	_, err := m.db.ExecContext(ctx,
+		`INSERT INTO messages (conversation_id, role, content) VALUES (?, ?, ?)`,
 		convID, role, content)
 	return err
 }
@@ -27,21 +26,24 @@ func (m *MessageMapper) Insert(ctx context.Context, convID, role, content string
 // LoadHistory returns the latest `limit` messages for a conversation in
 // chronological (ascending) order.
 func (m *MessageMapper) LoadHistory(ctx context.Context, convID string, limit int) ([]entity.Message, error) {
-	rows, err := m.pool.Query(ctx,
+	rows, err := m.db.QueryContext(ctx,
 		`SELECT id, conversation_id, role, content, created_at
-		 FROM messages WHERE conversation_id = $1
-		 ORDER BY created_at DESC LIMIT $2`, convID, limit)
+		 FROM messages WHERE conversation_id = ?
+		 ORDER BY created_at DESC LIMIT ?`, convID, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	msgs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (entity.Message, error) {
+	var msgs []entity.Message
+	for rows.Next() {
 		var msg entity.Message
-		err := r.Scan(&msg.ID, &msg.ConversationID, &msg.Role, &msg.Content, &msg.CreatedAt)
-		return msg, err
-	})
-	if err != nil {
+		if err := rows.Scan(&msg.ID, &msg.ConversationID, &msg.Role, &msg.Content, &msg.CreatedAt); err != nil {
+			return nil, err
+		}
+		msgs = append(msgs, msg)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	// Reverse into chronological order.

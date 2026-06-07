@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -38,9 +40,9 @@ import (
 	voiceimpl "github.com/Bruce-Sakura/UploadMyself/backend/pkg/voices/service/impl"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations/001_init.sql
@@ -50,7 +52,7 @@ func main() {
 	// ---- Config ----
 	viper.AutomaticEnv()
 	viper.SetDefault("APP_PORT", 8000)
-	viper.SetDefault("DB_DSN", "host=localhost user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable")
+	viper.SetDefault("DB_PATH", "./data/uploadmyself.db")
 	viper.SetDefault("ML_SCRIPTS_DIR", "../ml/scripts")
 	viper.SetDefault("PYTHON_BIN", "python3")
 	viper.SetDefault("ML_SERVICE_URL", "http://host.docker.internal:8001")
@@ -72,20 +74,24 @@ func main() {
 		log.Fatalf("create skills dir: %v", err)
 	}
 
-	// ---- Database (pgxpool) ----
+	// ---- Database (SQLite, modernc 纯 Go 驱动) ----
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, viper.GetString("DB_DSN"))
-	if err != nil {
-		log.Fatalf("db connect: %v", err)
+	dbPath := viper.GetString("DB_PATH")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+		log.Fatalf("create db dir: %v", err)
 	}
-	defer pool.Close()
-	if err := pool.Ping(ctx); err != nil {
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	if err != nil {
+		log.Fatalf("db open: %v", err)
+	}
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
 		log.Fatalf("db ping: %v", err)
 	}
-	if err := runMigrations(ctx, pool); err != nil {
+	if err := runMigrations(ctx, db); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
-	logger.Info("database connected & migrated")
+	logger.Info("database connected & migrated", zap.String("path", dbPath))
 
 	// ---- LLM client ----
 	llmClient := llm.New(
@@ -99,35 +105,35 @@ func main() {
 	mlServiceURL := viper.GetString("ML_SERVICE_URL")
 
 	// ---- Dependency injection: mapper -> service -> handler ----
-	taskSvc := taskimpl.NewTaskService(taskmapper.NewTaskMapper(pool))
+	taskSvc := taskimpl.NewTaskService(taskmapper.NewTaskMapper(db))
 	taskH := taskhandler.NewTaskHandler(taskSvc)
 
-	skillSvc := skillimpl.NewSkillService(skillmapper.NewSkillMapper(pool), taskSvc, llmClient, skillimpl.Config{
+	skillSvc := skillimpl.NewSkillService(skillmapper.NewSkillMapper(db), taskSvc, llmClient, skillimpl.Config{
 		SkillsDir: skillsDir,
 	})
 	skillH := skillhandler.NewSkillHandler(skillSvc)
 
-	voiceSvc := voiceimpl.NewVoiceService(voicemapper.NewVoiceMapper(pool), taskSvc, voiceimpl.Config{
+	voiceSvc := voiceimpl.NewVoiceService(voicemapper.NewVoiceMapper(db), taskSvc, voiceimpl.Config{
 		MLScriptsDir: mlScriptsDir,
 		PythonBin:    pythonBin,
 		UploadDir:    uploadsDir,
 	})
 	voiceH := voicehandler.NewVoiceHandler(voiceSvc)
 
-	avatarSvc := avatarimpl.NewAvatarService(avatarmapper.NewAvatarMapper(pool), taskSvc, avatarimpl.Config{
+	avatarSvc := avatarimpl.NewAvatarService(avatarmapper.NewAvatarMapper(db), taskSvc, avatarimpl.Config{
 		MLServiceURL: mlServiceURL,
 		UploadDir:    uploadsDir,
 	})
 	avatarH := avatarhandler.NewAvatarHandler(avatarSvc)
 
-	fileSvc := fileimpl.NewFileUploadService(filemapper.NewFileUploadMapper(pool), fileimpl.Config{
+	fileSvc := fileimpl.NewFileUploadService(filemapper.NewFileUploadMapper(db), fileimpl.Config{
 		UploadDir:    uploadsDir,
 		MLScriptsDir: mlScriptsDir,
 		PythonBin:    pythonBin,
 	})
 	fileH := filehandler.NewFileUploadHandler(fileSvc)
 
-	agentSvc := msgimpl.NewAgentService(msgmapper.NewMessageMapper(pool), llmClient, skillSvc)
+	agentSvc := msgimpl.NewAgentService(msgmapper.NewMessageMapper(db), llmClient, skillSvc)
 	agentH := msghandler.NewAgentHandler(agentSvc)
 
 	// ---- Router ----
@@ -159,14 +165,14 @@ func main() {
 	logger.Info("shutting down")
 }
 
-// runMigrations executes the embedded DDL statement-by-statement.
-// (pgx's extended protocol rejects multi-statement strings, so we split on ';'.)
-func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+// runMigrations executes the embedded DDL statement-by-statement
+// (split on ';' so each CREATE runs as a single statement).
+func runMigrations(ctx context.Context, db *sql.DB) error {
 	for _, stmt := range strings.Split(initSQL, ";") {
 		if strings.TrimSpace(stmt) == "" {
 			continue
 		}
-		if _, err := pool.Exec(ctx, stmt); err != nil {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
 			return fmt.Errorf("%w\nstatement: %s", err, strings.TrimSpace(stmt))
 		}
 	}

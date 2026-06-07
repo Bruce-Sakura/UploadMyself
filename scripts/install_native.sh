@@ -39,14 +39,14 @@ arch_tag() {
 # ---------- 系统依赖 ----------
 install_system_deps() {
   if ! command -v apt-get >/dev/null 2>&1; then
-    warn "未检测到 apt-get（非 Debian/Ubuntu）。请手动安装: git curl ffmpeg build-essential postgresql python3 python3-pip"
+    warn "未检测到 apt-get（非 Debian/Ubuntu）。请手动安装: git curl ffmpeg build-essential python3 python3-pip"
     return
   fi
   log "安装系统依赖 (apt)..."
   $SUDO apt-get update -y
   $SUDO apt-get install -y --no-install-recommends \
     git curl ca-certificates ffmpeg build-essential \
-    postgresql postgresql-contrib python3 python3-venv python3-pip
+    python3 python3-venv python3-pip
   ok "系统依赖就绪"
 }
 
@@ -96,23 +96,11 @@ install_miniconda() {
   source "$MINICONDA/etc/profile.d/conda.sh" 2>/dev/null || source "$(conda info --base)/etc/profile.d/conda.sh"
 }
 
-# ---------- PostgreSQL ----------
-setup_postgres() {
-  log "启动并初始化 PostgreSQL..."
-  $SUDO service postgresql start 2>/dev/null || $SUDO systemctl start postgresql 2>/dev/null || warn "请手动启动 postgresql"
-  # 幂等创建用户与库
-  if ! $SUDO -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='uploadmyself'" | grep -q 1; then
-    $SUDO -u postgres psql -c "CREATE USER uploadmyself WITH PASSWORD 'uploadmyself';"
-  fi
-  if ! $SUDO -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='uploadmyself'" | grep -q 1; then
-    $SUDO -u postgres psql -c "CREATE DATABASE uploadmyself OWNER uploadmyself;"
-  fi
-  ok "PostgreSQL: 库 uploadmyself 就绪"
-}
+# SQLite 无需独立数据库服务，数据库文件由后端启动时自动创建/迁移。
 
 create_home() {
   log "工作目录: $HOME_DIR"
-  mkdir -p "$HOME_DIR"/data/{uploads,skills,models} "$HOME_DIR/logs"
+  mkdir -p "$HOME_DIR"/data/{uploads,skills,models,db} "$HOME_DIR/logs"
 }
 
 # ---------- Python / ML ----------
@@ -173,7 +161,7 @@ write_env() {
 # 由 scripts/install_native.sh 生成（原生模式）
 UPLOADMYSELF_HOME=$HOME_DIR
 APP_PORT=8000
-DB_DSN=host=localhost user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable
+DB_PATH=$HOME_DIR/data/db/uploadmyself.db
 LLM_API_KEY=$LLM_KEY
 LLM_BASE_URL=$LLM_BASE
 LLM_MODEL=$LLM_MODEL
@@ -194,7 +182,6 @@ main() {
   ensure_node
   install_miniconda
   create_home
-  setup_postgres
   setup_conda_env
   build_backend
   build_upme

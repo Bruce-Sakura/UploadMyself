@@ -87,23 +87,18 @@ prompt_llm_key() {
 
 create_home() {
   log "工作目录: $HOME_DIR"
-  mkdir -p "$HOME_DIR"/data/{postgres,redis,uploads,skills,models} "$HOME_DIR/logs"
+  mkdir -p "$HOME_DIR"/data/{uploads,skills,models,db} "$HOME_DIR/logs"
 }
 
 write_env() {
   local abs_home; abs_home="$(cd "$HOME_DIR" && pwd)"
   cat > "$REPO_DIR/.env" <<EOF
-# 由 install.sh 生成
+# 由 install.sh 生成（Docker 模式）。数据库为 SQLite，路径在 compose 内固定。
 UPLOADMYSELF_HOME=$abs_home
 APP_PORT=8000
-DB_DSN=host=postgres user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable
 LLM_API_KEY=$LLM_KEY
 LLM_BASE_URL=$LLM_BASE
 LLM_MODEL=$LLM_MODEL
-PYTHON_BIN=python3
-ML_SCRIPTS_DIR=/app/ml/scripts
-SKILLS_DIR=/app/skills
-ML_SERVICE_URL=http://localhost:8001
 EOF
   ok ".env 已写入 $REPO_DIR/.env"
 }

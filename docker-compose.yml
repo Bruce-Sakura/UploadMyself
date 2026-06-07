@@ -1,31 +1,7 @@
-# UploadMyself — 全栈编排（全功能含 GPU ML）
-# 运行时数据集中存放在工作目录 ${UPLOADMYSELF_HOME}/data（默认 ~/UploadMyself，由 install.sh 写入 .env）。
+# UploadMyself — 全栈编排（SQLite，全功能含 GPU ML）
+# 运行时数据集中在 ${UPLOADMYSELF_HOME}/data（默认 ~/.UploadMyself，由 install.sh 写入 .env）。
+# 数据库为 SQLite 单文件，无需独立数据库容器。
 services:
-  # ===== Database =====
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: uploadmyself
-      POSTGRES_PASSWORD: uploadmyself
-      POSTGRES_DB: uploadmyself
-    ports:
-      - "5432:5432"
-    volumes:
-      - ${UPLOADMYSELF_HOME}/data/postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U uploadmyself"]
-      interval: 5s
-      retries: 5
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - ${UPLOADMYSELF_HOME}/data/redis:/data
-    restart: unless-stopped
-
   # ===== Backend (Go + Python ML/CharacterGen, GPU) =====
   backend:
     build:
@@ -34,15 +10,13 @@ services:
     ports:
       - "8000:8000"
       - "8001:8001"
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
       APP_PORT: "8000"
       PYTHON_BIN: "python3"
       ML_SCRIPTS_DIR: "/app/ml/scripts"
       SKILLS_DIR: "/app/skills"
-      DB_DSN: "host=postgres user=uploadmyself password=uploadmyself dbname=uploadmyself port=5432 sslmode=disable"
+      UPLOAD_DIR: "/app/uploads"
+      DB_PATH: "/app/data/uploadmyself.db"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_BASE_URL: "${LLM_BASE_URL:-https://token-plan-sgp.xiaomimimo.com/v1}"
       LLM_MODEL: "${LLM_MODEL:-mimo-v2.5-pro}"
@@ -53,6 +27,7 @@ services:
     volumes:
       - ${UPLOADMYSELF_HOME}/data/uploads:/app/uploads
       - ${UPLOADMYSELF_HOME}/data/skills:/app/skills
+      - ${UPLOADMYSELF_HOME}/data/db:/app/data
       - ${UPLOADMYSELF_HOME}/data/models:/root/.cache/huggingface
     deploy:
       resources:

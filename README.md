@@ -34,7 +34,7 @@
 |-------|-----------|
 | **Backend** | Go (Gin + pgx/pgxpool + Viper + Zap) |
 | **Frontend** | React 18 + TypeScript + Three.js + Ant Design |
-| **Database** | PostgreSQL + Redis |
+| **Database** | SQLite (modernc, pure-Go, single file) |
 | **Storage** | MinIO (S3-compatible) |
 | **ML** | PyTorch (called from Go via subprocess/gRPC) |
 
@@ -79,8 +79,8 @@ make models-download
 ### Run
 
 ```bash
-# Start dependencies
-docker-compose up -d redis postgres minio
+# SQLite 单文件数据库，无需额外依赖服务
+# 推荐直接用一键安装: bash install.sh
 
 # Backend (port 8000)
 cd backend && go run .
@@ -249,7 +249,7 @@ MIT License — see [LICENSE](LICENSE).
 
 - **后端**：Golang (Gin + pgx/pgxpool + Viper + Zap，分层模块结构)
 - **前端**：React 18 + TypeScript + Three.js + Ant Design
-- **数据库**：PostgreSQL + Redis
+- **数据库**：SQLite（modernc 纯 Go 驱动，单文件，零依赖）
 - **存储**：MinIO
 - **ML 推理**：PyTorch (通过 Go subprocess/gRPC 调用)
 
