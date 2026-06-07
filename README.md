@@ -42,6 +42,17 @@
 
 ## 🚀 Quick Start
 
+### ⚡ One-command install / 一键安装
+
+```bash
+git clone https://github.com/Bruce-Sakura/UploadMyself.git
+cd UploadMyself
+bash install.sh            # 交互选择 Docker / Linux 原生
+```
+
+See **[INSTALL.md](INSTALL.md)** — supports **Docker** and **Linux native**, full features incl. GPU ML, runtime data under `~/.UploadMyself`.
+详见 **[INSTALL.md](INSTALL.md)**：支持 **Docker** 与 **Linux 原生** 两种方式，全功能含 GPU ML，运行时数据集中在 `~/.UploadMyself`。
+
 ### Prerequisites
 
 - Go 1.22+

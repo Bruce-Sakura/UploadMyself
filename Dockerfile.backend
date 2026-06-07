@@ -7,7 +7,8 @@ WORKDIR /src
 COPY backend/go.mod backend/go.sum* ./
 RUN go mod download || true
 COPY backend/ .
-RUN go mod tidy && GOMAXPROCS=2 CGO_ENABLED=0 go build -o /uploadmyself .
+RUN go mod tidy && GOMAXPROCS=2 CGO_ENABLED=0 go build -o /uploadmyself . \
+    && CGO_ENABLED=0 go build -o /upme ./cmd/upme
 
 # ===== Stage 2: Python + ML =====
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS ml-base
@@ -38,8 +39,9 @@ FROM ml-base AS final
 
 WORKDIR /app
 
-# Copy Go binary
+# Copy Go binaries
 COPY --from=go-builder /uploadmyself .
+COPY --from=go-builder /upme /usr/local/bin/upme
 
 # Copy ML scripts
 COPY ml/scripts/ /app/ml/scripts/

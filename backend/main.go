@@ -55,6 +55,7 @@ func main() {
 	viper.SetDefault("PYTHON_BIN", "python3")
 	viper.SetDefault("ML_SERVICE_URL", "http://host.docker.internal:8001")
 	viper.SetDefault("SKILLS_DIR", "./skills")
+	viper.SetDefault("UPLOAD_DIR", "./uploads")
 	viper.SetDefault("LLM_API_KEY", "")
 	viper.SetDefault("LLM_BASE_URL", "https://api.openai.com/v1")
 	viper.SetDefault("LLM_MODEL", "mimo-v2.5-pro")
@@ -62,7 +63,7 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	uploadsDir := "./uploads"
+	uploadsDir := viper.GetString("UPLOAD_DIR")
 	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
 		log.Fatalf("create uploads dir: %v", err)
 	}
